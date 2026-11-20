@@ -1,0 +1,10 @@
+.git/
+.dockerignore
+**/Dockerfile*
+**/node_modules/
+**/dist/
+**/target/
+**/coverage/
+**/*.log*
+**/.env*
+.local/

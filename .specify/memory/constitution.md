@@ -1,50 +1,50 @@
-# [PROJECT_NAME] Constitution
-<!-- Example: Spec Constitution, TaskFlow Constitution, etc. -->
+# To Do Constitution
 
 ## Core Principles
 
-### [PRINCIPLE_1_NAME]
-<!-- Example: I. Library-First -->
-[PRINCIPLE_1_DESCRIPTION]
-<!-- Example: Every feature starts as a standalone library; Libraries must be self-contained, independently testable, documented; Clear purpose required - no organizational-only libraries -->
+### I. ユーザー操作と期待結果を受け入れ条件にする
 
-### [PRINCIPLE_2_NAME]
-<!-- Example: II. CLI Interface -->
-[PRINCIPLE_2_DESCRIPTION]
-<!-- Example: Every library exposes functionality via CLI; Text in/out protocol: stdin/args → stdout, errors → stderr; Support JSON + human-readable formats -->
+機能ごとに、ユーザーが行う操作と、その操作後に確認できる結果を
+受け入れ条件として仕様に記録する。機能の完了は、その条件を満たしたことを
+テスト結果または確認手順で判定する。
 
-### [PRINCIPLE_3_NAME]
-<!-- Example: III. Test-First (NON-NEGOTIABLE) -->
-[PRINCIPLE_3_DESCRIPTION]
-<!-- Example: TDD mandatory: Tests written → User approved → Tests fail → Then implement; Red-Green-Refactor cycle strictly enforced -->
+### II. 登録から再読み込み後の一覧表示までを先に作る
 
-### [PRINCIPLE_4_NAME]
-<!-- Example: IV. Integration Testing -->
-[PRINCIPLE_4_DESCRIPTION]
-<!-- Example: Focus areas requiring integration tests: New library contract tests, Contract changes, Inter-service communication, Shared schemas -->
+最初の実装では、ユーザーがタスクを登録でき、登録内容がデータベースに保存され、
+ページを再読み込みしてもそのタスクを一覧で確認できるようにする。
+この一連の操作を検証してから、追加の機能に進む。
 
-### [PRINCIPLE_5_NAME]
-<!-- Example: V. Observability, VI. Versioning & Breaking Changes, VII. Simplicity -->
-[PRINCIPLE_5_DESCRIPTION]
-<!-- Example: Text I/O ensures debuggability; Structured logging required; Or: MAJOR.MINOR.BUILD format; Or: Start simple, YAGNI principles -->
+### III. ローカルと GitHub Actions で検証を再現する
 
-## [SECTION_2_NAME]
-<!-- Example: Additional Constraints, Security Requirements, Performance Standards, etc. -->
+ローカルでアプリを起動し、テストを実行するための前提条件、設定、コマンドを
+リポジトリに記録する。GitHub Actions でもテストを実行し、結果を確認できるようにする。
 
-[SECTION_2_CONTENT]
-<!-- Example: Technology stack requirements, compliance standards, deployment policies, etc. -->
+### IV. Azure 環境は Bicep で定義し、確認済みの無料枠を使う
 
-## [SECTION_3_NAME]
-<!-- Example: Development Workflow, Review Process, Quality Gates, etc. -->
+Azure に配備する環境は Bicep で定義する。配備前に、作成予定の各リソースについて
+対象サブスクリプションで無料枠を利用できることと、予定する利用量がその枠内に収まることを
+確認する。確認できたリソースだけを作成する。
 
-[SECTION_3_CONTENT]
-<!-- Example: Code review requirements, testing gates, deployment approval process, etc. -->
+## デモの範囲
+
+「To Do」は、個人向け ToDo Web アプリを題材に、機能仕様の作成から実装、テスト、
+Azure への配備までの流れを示すデモである。
+
+## 開発とレビューの流れ
+
+機能仕様の受け入れ条件を実装計画とタスクに反映する。レビューでは、受け入れ条件の
+確認結果、ローカルでの起動とテストの再現手順、GitHub Actions の実行結果を確認する。
+Azure への配備前には、Bicep の定義と、対象サブスクリプションでの無料枠の確認結果を照合する。
 
 ## Governance
-<!-- Example: Constitution supersedes all other practices; Amendments require documentation, approval, migration plan -->
 
-[GOVERNANCE_RULES]
-<!-- Example: All PRs/reviews must verify compliance; Complexity must be justified; Use [GUIDANCE_FILE] for runtime development guidance -->
+この憲章を仕様、計画、実装、配備の判断基準とする。関連するプルリクエストのレビューでは、
+適用される原則を満たしていることを確認する。
 
-**Version**: [CONSTITUTION_VERSION] | **Ratified**: [RATIFICATION_DATE] | **Last Amended**: [LAST_AMENDED_DATE]
-<!-- Example: Version: 2.1.1 | Ratified: 2025-06-13 | Last Amended: 2025-07-16 -->
+改定時は、変更内容、理由、既存の仕様・計画・タスクへの影響を記録し、
+プロジェクトの管理者の承認後に版と改定日を更新する。
+既存の原則を削除するか、互換性を損なう形で変更する場合はメジャー版を上げる。
+原則の追加や規定の実質的な拡充はマイナー版、意味を変えない明確化や誤記修正は
+パッチ版を上げる。
+
+**Version**: 1.0.0 | **Ratified**: 2026-11-21 | **Last Amended**: 2026-11-21
