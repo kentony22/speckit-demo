@@ -1,0 +1,19 @@
+@import "tailwindcss";
+
+@theme {
+    --font-sans: Inter, "Hiragino Sans", "Yu Gothic", system-ui, sans-serif;
+    --color-canvas: #eef1f5;
+    --color-sidebar: #e3e8ef;
+    --color-block: #ffffff;
+    --color-ink: #152640;
+    --color-muted: #555a63;
+    --color-marker: #758295;
+    --color-selection: #b9d4ed;
+    --color-accent: #295680;
+}
+
+@layer base {
+    body {
+        @apply bg-canvas font-sans text-ink antialiased;
+    }
+}

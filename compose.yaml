@@ -1,0 +1,12 @@
+services:
+    cosmos:
+        image: mcr.microsoft.com/cosmosdb/linux/azure-cosmos-emulator:vnext-latest@sha256:db53613dae19d0a3d5ad50688d14aa6e957af082dafea56b52e1bd3a6b3f1406
+        command: ["--protocol", "https", "--enable-explorer", "false"]
+        ports:
+            - "127.0.0.1:8081:8081"
+            - "127.0.0.1:8080:8080"
+        volumes:
+            - cosmos-data:/data
+
+volumes:
+    cosmos-data:
