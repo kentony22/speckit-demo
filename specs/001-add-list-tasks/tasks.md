@@ -55,8 +55,9 @@
 - [X] T019 [P] `backend/src/main/resources/application-azure.yml` と `backend/src/main/java/com/example/todo/cosmos/AzureCosmosConfiguration.java` に Azure 用の接続を実装する。App Service のマネージド ID で Bicep が作成したコンテナーを使い、共有 Cosmos クライアントと Session 整合性を設定する。依存 T017。
 - [X] T020 GitHub Environment と Entra フェデレーションを設定し、対象環境の設定詳細を Git の追跡対象外のローカルメモに記録する。GitHub Actions の配備 ID に対象リソースグループでの Bicep と JAR の配備権限を付与する。依存 T017、T018。
     - `main` 限定の Environment、OIDC フェデレーション、環境シークレット4件、専用リソースグループ限定の Contributor のみを確認。リソースグループ内は空。
-- [ ] T021 `.github/workflows/deploy.yml` に `workflow_dispatch`、テストと JAR ビルド、OIDC 認証、対象環境での ARM 検証と what-if、リソース作成・更新、テスト済み JAR の配備を実装する。無料条件が未確認、または what-if に想定外・未解決の差分がある場合は作成前に停止する。依存 T016、T018、T019、T020。
+- [X] T021 `.github/workflows/deploy.yml` に `workflow_dispatch`、テストと JAR ビルド、OIDC 認証、対象環境での ARM 検証と what-if、リソース作成・更新、テスト済み JAR の配備を実装する。無料条件が未確認、または what-if に想定外・未解決の差分がある場合は作成前に停止する。依存 T016、T018、T019、T020。
     - 手動プレビューで OIDC、ARM プロバイダー検証、what-if が成功。差分は定義した11件の作成のみで、プレビュー後も専用リソースグループ内は空。実配備は配備直前の無料枠再確認後に実施する。
+    - 初回の Bicep 適用とテスト済み JAR の配備が成功。SCM の一時許可の削除を確認。
 - [ ] T022 `.github/workflows/deploy.yml` に起動待ちと配備後の確認を追加する。決定済みの認証とアクセス経路を使い、画面と静的アセット、合成タスクの POST `201`、別の GET で同一 ID と名前の取得、空白の POST `400` を確認する。依存 T021。
 - [ ] T023 `README.md` に手動ワークフローの実行と結果確認の手順を記録する。無料枠を確認済みの環境で実行し、適用後の F1・Java SE 25 と Cosmos DB 設定、配備後の確認結果、初回のブラウザー登録と再読み込みを確認する。依存 T022。
 

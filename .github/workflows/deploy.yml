@@ -5,10 +5,10 @@ on:
     workflow_dispatch:
         inputs:
             mode:
-                description: Preview or apply the Azure deployment
+                description: Preview, deploy, or verify the Azure deployment
                 required: true
                 type: choice
-                options: [preview, deploy]
+                options: [preview, deploy, verify]
                 default: preview
             preview_run:
                 description: Successful preview run ID for this main commit (required for deploy)
@@ -102,7 +102,7 @@ jobs:
         # Keep the job eligible for cleanup when the run is cancelled.
         if: |
             always() && github.ref == 'refs/heads/main' &&
-            ((inputs.mode == 'preview' && needs.build.result == 'skipped') ||
+            ((inputs.mode != 'deploy' && needs.build.result == 'skipped') ||
              (inputs.mode == 'deploy' && needs.build.result == 'success'))
         permissions:
             contents: read
@@ -139,11 +139,11 @@ jobs:
                   subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
 
             - name: Install Bicep
-              if: success() && !cancelled()
+              if: success() && !cancelled() && inputs.mode != 'verify'
               run: az bicep install --version v0.49.2
 
             - name: Validate free-tier settings and preview changes
-              if: success() && !cancelled()
+              if: success() && !cancelled() && inputs.mode != 'verify'
               env:
                   DEPLOY_MODE: ${{ inputs.mode }}
               run: ./scripts/azure-preflight.sh "$DEPLOY_MODE"
@@ -159,7 +159,7 @@ jobs:
               run: ./scripts/azure-deploy-jar.sh --cleanup
 
             - name: Report deployed settings and browser URL
-              if: success() && !cancelled() && inputs.mode == 'deploy'
+              if: success() && !cancelled() && inputs.mode != 'preview'
               run: |
                   az appservice plan show --subscription "$AZURE_SUBSCRIPTION_ID" -g "$AZURE_RESOURCE_GROUP" -n "$AZURE_APP_SERVICE_PLAN" -o json |
                       jq -e '.sku.name == "F1" and .sku.capacity == 1 and ((.properties.reserved // .reserved) == true)'

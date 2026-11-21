@@ -133,3 +133,6 @@ Web App のシステム割り当てマネージド ID には、Cosmos DB のア�
    ワークフローは ARM 検証と what-if を再実行し、`npm ci`、`npm run build`、Maven の `-Pbundled-web verify` で作った JAR を配備する。
 4. Summary の URL を許可した IP のブラウザーで開き、タスクを1件登録してから再読み込みし、登録内容を確認する。
    Actions ランナーからは画面と API の両方が HTTP 403 になることを確認する。
+
+Bicep と JAR の配備が済んでいて設定確認だけをやり直す場合は、`verify` モードで実行する。
+`verify` では Azure の実設定と許可外からの HTTP 403 を読み取り確認する。
