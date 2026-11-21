@@ -67,9 +67,16 @@ export function updateTaskImportance(id: string, important: boolean): Promise<Ta
 export type TaskList = {
     id: string;
     name: string;
+    groupId?: string | null;
+};
+
+export type ListGroup = {
+    id: string;
+    name: string;
 };
 
 const taskListsPath = '/api/task-lists';
+const listGroupsPath = '/api/list-groups';
 
 export function listTaskLists(signal: AbortSignal): Promise<TaskList[]> {
     return request<TaskList[]>(taskListsPath, { signal, cache: 'no-store' });
@@ -80,6 +87,34 @@ export function createTaskList(name: string): Promise<TaskList> {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ name }),
+    });
+}
+
+export function listListGroups(signal: AbortSignal): Promise<ListGroup[]> {
+    return request<ListGroup[]>(listGroupsPath, { signal, cache: 'no-store' });
+}
+
+export function createListGroup(name: string): Promise<ListGroup> {
+    return request<ListGroup>(listGroupsPath, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name }),
+    });
+}
+
+export function updateListGroupName(groupId: string, name: string): Promise<ListGroup> {
+    return request<ListGroup>(`${listGroupsPath}/${encodeURIComponent(groupId)}/name`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name }),
+    });
+}
+
+export function updateTaskListGroup(listId: string, groupId: string | null): Promise<TaskList> {
+    return request<TaskList>(`${taskListsPath}/${encodeURIComponent(listId)}/group`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ groupId }),
     });
 }
 

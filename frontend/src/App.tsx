@@ -4,7 +4,7 @@ import { createTask, isBlankTaskName, listTasks, TaskRequestError, updateTaskCom
 import type { Task, TaskList } from './api/tasks';
 import TaskDeleteAction from './TaskDeleteAction';
 import TaskNameEditor from './TaskNameEditor';
-import { TaskListMembership, TaskListNavigation, useTaskLists } from './TaskLists';
+import { TaskListGroupAssignment, TaskListMembership, TaskListNavigation, useTaskLists } from './TaskLists';
 import { resolveVisibleTasks } from './taskSearch';
 
 type TaskUpdate = Partial<Omit<Task, 'id'>>;
@@ -160,6 +160,14 @@ export default function App() {
                     <h1 id="tasks-heading" className="mb-5 text-3xl font-extrabold tracking-tight wrap-anywhere sm:mb-6 sm:text-4xl">
                         {isImportantView ? '重要' : selectedList?.name ?? 'すべてのタスク'}
                     </h1>
+                    {selectedList && taskLists.groups.length > 0 && (
+                        <TaskListGroupAssignment
+                            key={selectedList.id}
+                            list={selectedList}
+                            groups={taskLists.groups}
+                            onUpdated={taskLists.updateList}
+                        />
+                    )}
                     <div className="relative mb-5 sm:mb-6">
                         <svg
                             aria-hidden="true"

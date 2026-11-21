@@ -56,7 +56,7 @@ class CosmosTaskRepository {
     }
 
     boolean delete(String id) {
-        if (TaskListDocument.isListId(id)) {
+        if (TaskListDocument.isListId(id) || TaskListGroupDocument.isGroupId(id)) {
             return false;
         }
         try {
@@ -71,7 +71,7 @@ class CosmosTaskRepository {
     }
 
     private Optional<TaskDocument> patchTask(String id, CosmosPatchOperations operations) {
-        if (TaskListDocument.isListId(id)) {
+        if (TaskListDocument.isListId(id) || TaskListGroupDocument.isGroupId(id)) {
             return Optional.empty();
         }
         var options = new CosmosPatchItemRequestOptions();
@@ -124,6 +124,75 @@ class CosmosTaskRepository {
         } catch (CosmosException error) {
             if (error.getStatusCode() == HttpStatus.NOT_FOUND.value()) {
                 return false;
+            }
+            throw error;
+        }
+    }
+
+    TaskListGroupDocument createListGroup(String name) {
+        var item = new TaskListGroupDocument(TaskListGroupDocument.ID_PREFIX + UUID.randomUUID(), ownerId,
+                TaskListGroupDocument.KIND, name, Instant.now().toString());
+        container.createItem(item, partitionKey, new CosmosItemRequestOptions());
+        return item;
+    }
+
+    List<TaskListGroupDocument> findListGroups() {
+        var options = new CosmosQueryRequestOptions().setPartitionKey(partitionKey);
+        var query = new SqlQuerySpec("SELECT * FROM c WHERE c.kind = @kind",
+                new SqlParameter("@kind", TaskListGroupDocument.KIND));
+        return container.queryItems(query, options, TaskListGroupDocument.class).stream()
+                .sorted(Comparator.comparing((TaskListGroupDocument group) -> Instant.parse(group.createdAt()))
+                        .thenComparing(TaskListGroupDocument::id))
+                .toList();
+    }
+
+    boolean groupExists(String id) {
+        if (!TaskListGroupDocument.isGroupId(id)) {
+            return false;
+        }
+        try {
+            var item = container.readItem(id, partitionKey, TaskListGroupDocument.class).getItem();
+            return TaskListGroupDocument.KIND.equals(item.kind());
+        } catch (CosmosException error) {
+            if (error.getStatusCode() == HttpStatus.NOT_FOUND.value()) {
+                return false;
+            }
+            throw error;
+        }
+    }
+
+    Optional<TaskListDocument> updateListGroup(String id, String groupId) {
+        if (!TaskListDocument.isListId(id)) {
+            return Optional.empty();
+        }
+        var operations = CosmosPatchOperations.create()
+                .set("/groupId", groupId == null ? NullNode.getInstance() : groupId);
+        var options = new CosmosPatchItemRequestOptions();
+        options.setContentResponseOnWriteEnabled(true);
+        try {
+            var response = container.patchItem(id, partitionKey, operations, options, TaskListDocument.class);
+            return Optional.of(response.getItem());
+        } catch (CosmosException error) {
+            if (error.getStatusCode() == HttpStatus.NOT_FOUND.value()) {
+                return Optional.empty();
+            }
+            throw error;
+        }
+    }
+
+    Optional<TaskListGroupDocument> updateListGroupName(String id, String name) {
+        if (!TaskListGroupDocument.isGroupId(id)) {
+            return Optional.empty();
+        }
+        var operations = CosmosPatchOperations.create().set("/name", name);
+        var options = new CosmosPatchItemRequestOptions();
+        options.setContentResponseOnWriteEnabled(true);
+        try {
+            var response = container.patchItem(id, partitionKey, operations, options, TaskListGroupDocument.class);
+            return Optional.of(response.getItem());
+        } catch (CosmosException error) {
+            if (error.getStatusCode() == HttpStatus.NOT_FOUND.value()) {
+                return Optional.empty();
             }
             throw error;
         }
