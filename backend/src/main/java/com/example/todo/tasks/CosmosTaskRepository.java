@@ -215,4 +215,25 @@ class CosmosTaskRepository {
             throw error;
         }
     }
+
+    boolean deleteListGroup(String id) {
+        if (!groupExists(id)) {
+            return false;
+        }
+        var options = new CosmosQueryRequestOptions().setPartitionKey(partitionKey);
+        var query = new SqlQuerySpec("SELECT * FROM c WHERE c.kind = @kind AND c.groupId = @groupId",
+                List.of(new SqlParameter("@kind", TaskListDocument.KIND), new SqlParameter("@groupId", id)));
+        for (var list : container.queryItems(query, options, TaskListDocument.class)) {
+            updateListGroup(list.id(), null);
+        }
+        try {
+            container.deleteItem(id, partitionKey, new CosmosItemRequestOptions());
+            return true;
+        } catch (CosmosException error) {
+            if (error.getStatusCode() == HttpStatus.NOT_FOUND.value()) {
+                return false;
+            }
+            throw error;
+        }
+    }
 }

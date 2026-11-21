@@ -118,6 +118,16 @@ export function updateListGroupName(groupId: string, name: string): Promise<List
     });
 }
 
+export async function deleteListGroup(groupId: string): Promise<void> {
+    const response = await fetch(`${listGroupsPath}/${encodeURIComponent(groupId)}`, {
+        method: 'DELETE',
+    });
+    if (!response.ok) {
+        const body = await response.json().catch(() => null);
+        throw new TaskRequestError(body?.code ?? 'TASK_REQUEST_FAILED');
+    }
+}
+
 export function updateTaskListGroup(listId: string, groupId: string | null): Promise<TaskList> {
     return request<TaskList>(`${taskListsPath}/${encodeURIComponent(listId)}/group`, {
         method: 'PATCH',
