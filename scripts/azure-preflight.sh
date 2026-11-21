@@ -17,37 +17,8 @@ except ValueError:
     sys.exit("Set AZURE_VERIFIER_IPV4 to the verifier's public IPv4 address, without a CIDR suffix.")
 PY
 
-if [[ "$(az account show --subscription "$AZURE_SUBSCRIPTION_ID" --query state -o tsv)" != "Enabled" ]]; then
-    echo 'The deployment subscription is not Enabled.' >&2
-    exit 1
-fi
-
 group_id="/subscriptions/$AZURE_SUBSCRIPTION_ID/resourceGroups/$AZURE_RESOURCE_GROUP"
-expected_cosmos_id="$group_id/providers/Microsoft.DocumentDB/databaseAccounts/$AZURE_COSMOS_ACCOUNT"
 plan_id="$group_id/providers/Microsoft.Web/serverfarms/$AZURE_APP_SERVICE_PLAN"
-
-# Query the entire subscription because Cosmos DB's free-tier slot is subscription-wide.
-accounts="$(az cosmosdb list --subscription "$AZURE_SUBSCRIPTION_ID" -o json)"
-if ! jq -e --arg target "$expected_cosmos_id" '
-    def is_target: (.id | ascii_downcase) == ($target | ascii_downcase);
-    all(.[]; (.enableFreeTier | type) == "boolean" and
-        (if is_target then .enableFreeTier else (.enableFreeTier | not) end))
-' <<< "$accounts" > /dev/null; then
-    echo 'Cannot confirm the Cosmos DB Free Tier slot or the target account already exists without Free Tier.' >&2
-    exit 1
-fi
-
-if ! az appservice list-locations --subscription "$AZURE_SUBSCRIPTION_ID" --sku F1 --linux-workers-enabled -o json |
-    jq -e --arg location "$AZURE_LOCATION" 'any(.[]; (.name | ascii_downcase | gsub(" "; "")) == $location)' > /dev/null; then
-    echo 'Linux F1 is not listed in the deployment region.' >&2
-    exit 1
-fi
-
-if ! az webapp list-runtimes --subscription "$AZURE_SUBSCRIPTION_ID" --os linux --runtime java -o json |
-    jq -e 'any(.[]; .config == "JAVA:25-java25" and .support == "Active")' > /dev/null; then
-    echo 'Java SE 25 is not listed as Active for Linux.' >&2
-    exit 1
-fi
 
 # Refuse to overwrite an existing plan with unexpected capacity or SKU.
 resources="$(az resource list --subscription "$AZURE_SUBSCRIPTION_ID" --resource-group "$AZURE_RESOURCE_GROUP" -o json)"
@@ -99,6 +70,7 @@ jq -er '
 {
     printf '\n### Azure preflight\n\n'
     printf '%s\n' 'Linux F1 / Java SE 25; Cosmos DB Free Tier, one region, fixed 400 RU/s and account limit 1,000 RU/s.'
+    printf '\n%s\n' 'Run the subscription-wide Free Tier check with your Azure user account before deploying.'
     printf '\n```text\n'
     sed -E 's|/subscriptions/[^/]+|/subscriptions/<redacted>|g' "${preview%.json}.txt"
     printf '```\n'

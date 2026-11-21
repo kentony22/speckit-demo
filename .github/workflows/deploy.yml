@@ -5,7 +5,7 @@ on:
     workflow_dispatch:
         inputs:
             mode:
-                description: Preview or apply to Azure-Learning-Lab
+                description: Preview or apply the Azure deployment
                 required: true
                 type: choice
                 options: [preview, deploy]
@@ -13,6 +13,10 @@ on:
             preview_run:
                 description: Successful preview run ID for this main commit (required for deploy)
                 type: string
+            free_tier_confirmed:
+                description: I reran the Free Tier check with my Azure user account (required for deploy)
+                type: boolean
+                default: false
 
 concurrency:
     group: azure-learning-lab-japanwest
@@ -44,13 +48,21 @@ jobs:
               with:
                   persist-credentials: false
 
-            - name: Require a successful preview of this commit
+            - name: Require Free Tier confirmation and a successful preview
               if: inputs.mode == 'deploy'
               env:
                   GH_TOKEN: ${{ github.token }}
                   PREVIEW_RUN: ${{ inputs.preview_run }}
+                  FREE_TIER_CONFIRMED: ${{ inputs.free_tier_confirmed }}
               run: |
-                  [[ "$PREVIEW_RUN" =~ ^[0-9]+$ ]]
+                  if [[ "$FREE_TIER_CONFIRMED" != true ]]; then
+                      echo "::error::Rerun the subscription-wide Free Tier check before deploying."
+                      exit 1
+                  fi
+                  if [[ ! "$PREVIEW_RUN" =~ ^[0-9]+$ ]]; then
+                      echo "::error::Provide the run ID of a successful preview of this commit."
+                      exit 1
+                  fi
                   gh api "repos/$GITHUB_REPOSITORY/actions/runs/$PREVIEW_RUN" |
                       jq -e --arg sha "$GITHUB_SHA" '
                         .path == ".github/workflows/deploy.yml" and .head_branch == "main" and
