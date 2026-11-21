@@ -1,6 +1,7 @@
 package com.example.todo.tasks;
 
 import com.azure.cosmos.CosmosContainer;
+import com.azure.cosmos.CosmosException;
 import com.azure.cosmos.models.CosmosItemRequestOptions;
 import com.azure.cosmos.models.PartitionKey;
 import com.fasterxml.jackson.databind.node.BooleanNode;
@@ -17,7 +18,9 @@ import org.springframework.test.web.servlet.MockMvc;
 import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.springframework.http.MediaType.APPLICATION_JSON;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
@@ -203,6 +206,91 @@ class TasksCosmosIT {
             assertThat(container.readItem(id, partition, item.getClass()).getItem().has("completed")).isFalse();
         } finally {
             container.deleteItem(id, partition, new CosmosItemRequestOptions());
+        }
+    }
+
+    @Test
+    void deletesOnlyTheSelectedTaskAndKeepsOtherTasksAndLists() throws Exception {
+        var partition = new PartitionKey(OWNER_ID);
+        var options = new CosmosItemRequestOptions();
+        var list = new TaskListDocument(TaskListDocument.ID_PREFIX + UUID.randomUUID(), OWNER_ID,
+                TaskListDocument.KIND, "仕事", "2026-11-21T00:00:00Z");
+        var first = new TaskDocument(UUID.randomUUID().toString(), OWNER_ID, "消すタスク", "2026-11-21T00:00:00Z", true, true, list.id());
+        var second = new TaskDocument(UUID.randomUUID().toString(), OWNER_ID, "残すタスク", "2026-11-20T00:00:00Z", false, true, list.id());
+        container.createItem(list, partition, options);
+        var firstDeleted = false;
+        try {
+            container.createItem(first, partition, options);
+            try {
+                container.createItem(second, partition, options);
+                try {
+                    mvc.perform(delete("/api/tasks/{id}", first.id()))
+                            .andExpect(status().isNoContent());
+                    firstDeleted = true;
+
+                    mvc.perform(delete("/api/tasks/{id}", first.id()))
+                            .andExpect(status().isNotFound())
+                            .andExpect(jsonPath("$.code").value("TASK_NOT_FOUND"));
+                    mvc.perform(get("/api/tasks"))
+                            .andExpect(status().isOk())
+                            .andExpect(jsonPath("$.length()").value(1))
+                            .andExpect(jsonPath("$[0].id").value(second.id()))
+                            .andExpect(jsonPath("$[0].name").value("残すタスク"))
+                            .andExpect(jsonPath("$[0].important").value(true))
+                            .andExpect(jsonPath("$[0].listId").value(list.id()));
+                    mvc.perform(get("/api/task-lists"))
+                            .andExpect(status().isOk())
+                            .andExpect(jsonPath("$.length()").value(1))
+                            .andExpect(jsonPath("$[0].id").value(list.id()));
+
+                    assertThatThrownBy(() -> container.readItem(first.id(), partition, TaskDocument.class))
+                            .isInstanceOf(CosmosException.class)
+                            .extracting(error -> ((CosmosException) error).getStatusCode())
+                            .isEqualTo(404);
+                    assertThat(container.readItem(second.id(), partition, TaskDocument.class).getItem()).isEqualTo(second);
+                    assertThat(container.readItem(list.id(), partition, TaskListDocument.class).getItem()).isEqualTo(list);
+                } finally {
+                    container.deleteItem(second.id(), partition, options);
+                }
+            } finally {
+                if (!firstDeleted) {
+                    container.deleteItem(first.id(), partition, options);
+                }
+            }
+        } finally {
+            container.deleteItem(list.id(), partition, options);
+        }
+    }
+
+    @Test
+    void doesNotDeleteATaskInAnotherPartitionOrATaskList() throws Exception {
+        var options = new CosmosItemRequestOptions();
+        var otherId = UUID.randomUUID().toString();
+        var otherOwner = OWNER_ID + "-other";
+        var otherPartition = new PartitionKey(otherOwner);
+        var foreignTask = new TaskDocument(otherId, otherOwner, "別の所有者のタスク", "2026-11-21T00:00:00Z", false, false);
+        var list = new TaskListDocument(TaskListDocument.ID_PREFIX + UUID.randomUUID(), OWNER_ID,
+                TaskListDocument.KIND, "保護対象リスト", "2026-11-21T00:00:00Z");
+        var ownPartition = new PartitionKey(OWNER_ID);
+
+        container.createItem(foreignTask, otherPartition, options);
+        try {
+            container.createItem(list, ownPartition, options);
+            try {
+                mvc.perform(delete("/api/tasks/{id}", otherId))
+                        .andExpect(status().isNotFound())
+                        .andExpect(jsonPath("$.code").value("TASK_NOT_FOUND"));
+                assertThat(container.readItem(otherId, otherPartition, TaskDocument.class).getItem()).isEqualTo(foreignTask);
+
+                mvc.perform(delete("/api/tasks/{id}", list.id()))
+                        .andExpect(status().isNotFound())
+                        .andExpect(jsonPath("$.code").value("TASK_NOT_FOUND"));
+                assertThat(container.readItem(list.id(), ownPartition, TaskListDocument.class).getItem()).isEqualTo(list);
+            } finally {
+                container.deleteItem(list.id(), ownPartition, options);
+            }
+        } finally {
+            container.deleteItem(otherId, otherPartition, options);
         }
     }
 }

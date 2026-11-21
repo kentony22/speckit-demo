@@ -55,6 +55,21 @@ class CosmosTaskRepository {
         return patchTask(id, operations);
     }
 
+    boolean delete(String id) {
+        if (TaskListDocument.isListId(id)) {
+            return false;
+        }
+        try {
+            container.deleteItem(id, partitionKey, new CosmosItemRequestOptions());
+            return true;
+        } catch (CosmosException error) {
+            if (error.getStatusCode() == HttpStatus.NOT_FOUND.value()) {
+                return false;
+            }
+            throw error;
+        }
+    }
+
     private Optional<TaskDocument> patchTask(String id, CosmosPatchOperations operations) {
         if (TaskListDocument.isListId(id)) {
             return Optional.empty();
