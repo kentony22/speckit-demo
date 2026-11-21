@@ -76,3 +76,15 @@ JAVA_TOOL_OPTIONS="-Djavax.net.ssl.trustStore=\"$PWD/../.local/cosmos.p12\" -Dja
 
 停止するには、アプリの各ターミナルで Ctrl+C を押し、リポジトリルートで
 `docker compose stop` を実行します。
+
+## GitHub Actions CI
+
+`main` 向けのプルリクエストでは [CI ワークフロー](.github/workflows/ci.yml) が実行されます。
+PR の **Checks** タブで次の2つのジョブが成功していることを確認します。
+
+- **Frontend build** — `frontend/.node-version` の Node.js を使用し、
+  `npm ci` でロックファイルどおりに依存関係をインストールしてから `npm run build` を実行します。
+- **Backend tests** — JDK 25 でローカルと同じ Compose 設定から Cosmos DB vNext エミュレーターを起動し、
+  Java 用の証明書を準備して `./mvnw -B -ntp verify` を実行します。REST テストと Cosmos DB 結合テストが対象です。
+
+エミュレーターはジョブごとのランナー内で動きます。GitHub に Azure の接続情報を設定する必要はありません。
