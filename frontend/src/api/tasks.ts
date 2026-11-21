@@ -45,3 +45,11 @@ export function updateTaskCompletion(id: string, completed: boolean): Promise<Ta
         body: JSON.stringify({ completed }),
     });
 }
+
+export function updateTaskName(id: string, name: string): Promise<Task> {
+    return request<Task>(`${tasksPath}/${encodeURIComponent(id)}/name`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name }),
+    });
+}

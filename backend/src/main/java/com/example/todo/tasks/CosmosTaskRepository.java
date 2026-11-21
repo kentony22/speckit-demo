@@ -36,7 +36,14 @@ class CosmosTaskRepository {
     }
 
     Optional<TaskDocument> updateCompletion(String id, boolean completed) {
-        var operations = CosmosPatchOperations.create().set("/completed", completed);
+        return patchTask(id, CosmosPatchOperations.create().set("/completed", completed));
+    }
+
+    Optional<TaskDocument> updateName(String id, String name) {
+        return patchTask(id, CosmosPatchOperations.create().set("/name", name));
+    }
+
+    private Optional<TaskDocument> patchTask(String id, CosmosPatchOperations operations) {
         var options = new CosmosPatchItemRequestOptions();
         options.setContentResponseOnWriteEnabled(true);
         try {
