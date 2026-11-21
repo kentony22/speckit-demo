@@ -1,0 +1,52 @@
+name: CI
+
+on:
+    pull_request:
+        branches: [main]
+
+permissions:
+    contents: read
+
+jobs:
+    frontend:
+        name: Frontend build
+        runs-on: ubuntu-24.04
+        defaults:
+            run:
+                working-directory: frontend
+        steps:
+            - uses: actions/checkout@v7
+              with:
+                  persist-credentials: false
+            - uses: actions/setup-node@v7
+              with:
+                  node-version-file: frontend/.node-version
+                  cache: npm
+                  cache-dependency-path: frontend/package-lock.json
+            - run: npm ci
+            - run: npm run build
+
+    backend:
+        name: Backend tests
+        runs-on: ubuntu-24.04
+        steps:
+            - uses: actions/checkout@v7
+              with:
+                  persist-credentials: false
+            - uses: actions/setup-java@v6
+              with:
+                  distribution: temurin
+                  java-version: '25'
+                  cache: maven
+            - name: Start Cosmos DB vNext emulator
+              run: docker compose up -d cosmos
+            - name: Prepare Java trust store and run tests
+              shell: bash
+              run: |
+                  truststore="$(./scripts/prepare-local-cosmos.sh)"
+                  cd backend
+                  JAVA_TOOL_OPTIONS="-Djavax.net.ssl.trustStore=\"$truststore\" -Djavax.net.ssl.trustStorePassword=changeit" \
+                      ./mvnw -B -ntp verify
+            - name: Show emulator logs on failure
+              if: failure()
+              run: docker compose logs --no-color cosmos

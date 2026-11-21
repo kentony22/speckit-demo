@@ -34,8 +34,8 @@
 
 ## フェーズ2 — GitHub Actions で CI
 
-- [ ] T013 `.github/workflows/ci.yml` に `pull_request` のフロント・バックエンドジョブを設定する。固定した Node.js で `npm ci` と `npm run build`、JDK 25 で Maven Wrapper の `verify` を実行する。バックエンドでは同じ vNext イメージと証明書設定を使い、結合テスト用のデータを分離する。依存 T012。
-- [ ] T014 `README.md` に PR の検証内容と確認手順を記載し、PR の実行結果からフロントのビルド、バックエンドのテストと Cosmos DB 結合テストの成功を確認する。依存 T013。
+- [X] T013 `.github/workflows/ci.yml` に `pull_request` のフロント・バックエンドジョブを設定する。固定した Node.js で `npm ci` と `npm run build`、JDK 25 で Maven Wrapper の `verify` を実行する。バックエンドでは同じ vNext イメージと証明書設定を使い、結合テスト用のデータを分離する。依存 T012。
+- [X] T014 `README.md` に PR の検証内容と確認手順を記載し、PR の実行結果からフロントのビルド、バックエンドのテストと Cosmos DB 結合テストの成功を確認する。依存 T013。
 
 **完了条件** — PR を対象とする GitHub Actions で両ジョブが実際に成功する。PR の検証には Azure 認証が不要で、ローカルと同じバックエンドテストを実行できる。
 
