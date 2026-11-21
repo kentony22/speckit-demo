@@ -180,6 +180,24 @@ class CosmosTaskRepository {
         }
     }
 
+    Optional<TaskListDocument> updateListName(String id, String name) {
+        if (!TaskListDocument.isListId(id)) {
+            return Optional.empty();
+        }
+        var operations = CosmosPatchOperations.create().set("/name", name);
+        var options = new CosmosPatchItemRequestOptions();
+        options.setContentResponseOnWriteEnabled(true);
+        try {
+            var response = container.patchItem(id, partitionKey, operations, options, TaskListDocument.class);
+            return Optional.of(response.getItem());
+        } catch (CosmosException error) {
+            if (error.getStatusCode() == HttpStatus.NOT_FOUND.value()) {
+                return Optional.empty();
+            }
+            throw error;
+        }
+    }
+
     Optional<TaskListGroupDocument> updateListGroupName(String id, String name) {
         if (!TaskListGroupDocument.isGroupId(id)) {
             return Optional.empty();

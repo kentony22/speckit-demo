@@ -4,7 +4,7 @@ import { createTask, isBlankTaskName, listTasks, TaskRequestError, updateTaskCom
 import type { Task, TaskList } from './api/tasks';
 import TaskDeleteAction from './TaskDeleteAction';
 import TaskNameEditor from './TaskNameEditor';
-import { TaskListGroupAssignment, TaskListMembership, TaskListNavigation, useTaskLists } from './TaskLists';
+import { TaskListGroupAssignment, TaskListMembership, TaskListNameEditor, TaskListNavigation, useTaskLists } from './TaskLists';
 import { resolveVisibleTasks } from './taskSearch';
 
 type TaskUpdate = Partial<Omit<Task, 'id'>>;
@@ -84,6 +84,11 @@ export default function App() {
     const [searchQuery, setSearchQuery] = useState('');
     const [saveError, setSaveError] = useState('');
     const [saving, setSaving] = useState(false);
+    const [editingSelectedList, setEditingSelectedList] = useState(false);
+
+    useEffect(() => {
+        setEditingSelectedList(false);
+    }, [selectedList?.id]);
 
     useEffect(() => {
         const request = new AbortController();
@@ -157,9 +162,34 @@ export default function App() {
 
             <main className="flex min-w-0 flex-col bg-canvas">
                 <section id="tasks" aria-labelledby="tasks-heading" className="grow px-5 pt-7 pb-6 sm:px-8 sm:pt-10 lg:px-12">
-                    <h1 id="tasks-heading" className="mb-5 text-3xl font-extrabold tracking-tight wrap-anywhere sm:mb-6 sm:text-4xl">
-                        {isImportantView ? '重要' : selectedList?.name ?? 'すべてのタスク'}
-                    </h1>
+                    <div className="mb-5 flex flex-wrap items-center gap-3 sm:mb-6">
+                        <h1 id="tasks-heading" className="text-3xl font-extrabold tracking-tight wrap-anywhere sm:text-4xl">
+                            {isImportantView ? '重要' : selectedList?.name ?? 'すべてのタスク'}
+                        </h1>
+                        {selectedList && !editingSelectedList && (
+                            <button
+                                type="button"
+                                aria-label="表示中のリスト名を編集"
+                                onClick={() => setEditingSelectedList(true)}
+                                className="rounded px-2 py-1 text-sm font-semibold text-accent underline focus-visible:outline-2 focus-visible:outline-accent"
+                            >
+                                リスト名を編集
+                            </button>
+                        )}
+                    </div>
+                    {selectedList && editingSelectedList && (
+                        <div className="mb-4 max-w-md">
+                            <TaskListNameEditor
+                                key={selectedList.id}
+                                list={selectedList}
+                                onSaved={(updated) => {
+                                    taskLists.updateList(updated);
+                                    setEditingSelectedList(false);
+                                }}
+                                onCancel={() => setEditingSelectedList(false)}
+                            />
+                        </div>
+                    )}
                     {selectedList && taskLists.groups.length > 0 && (
                         <TaskListGroupAssignment
                             key={selectedList.id}

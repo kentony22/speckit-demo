@@ -90,6 +90,14 @@ export function createTaskList(name: string): Promise<TaskList> {
     });
 }
 
+export function updateTaskListName(listId: string, name: string): Promise<TaskList> {
+    return request<TaskList>(`${taskListsPath}/${encodeURIComponent(listId)}/name`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name }),
+    });
+}
+
 export function listListGroups(signal: AbortSignal): Promise<ListGroup[]> {
     return request<ListGroup[]>(listGroupsPath, { signal, cache: 'no-store' });
 }

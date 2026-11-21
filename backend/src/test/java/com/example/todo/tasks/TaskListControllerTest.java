@@ -169,4 +169,40 @@ class TaskListControllerTest {
                 .andExpect(status().isServiceUnavailable())
                 .andExpect(jsonPath("$.code").value("TASK_STORAGE_UNAVAILABLE"));
     }
+
+    @Test
+    void renamesATaskList() throws Exception {
+        when(repository.updateListName("list-1", "週末の買い物")).thenReturn(Optional.of(
+                new TaskListDocument("list-1", "demo-user", TaskListDocument.KIND, "週末の買い物", "2026-11-21T00:00:00Z", "group-1")));
+        mvc.perform(patch("/api/task-lists/{id}/name", "list-1").contentType(APPLICATION_JSON)
+                        .content("{\"name\":\"週末の買い物\"}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.id").value("list-1"))
+                .andExpect(jsonPath("$.name").value("週末の買い物"))
+                .andExpect(jsonPath("$.groupId").value("group-1"));
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {"", "{}", "{\"name\":null}", "{\"name\":123}", "{\"name\":\"\"}", "{\"name\":\"   \"}", "{\"name\":\"　\"}"})
+    void rejectsInvalidTaskListRename(String payload) throws Exception {
+        mvc.perform(patch("/api/task-lists/{id}/name", "list-1").contentType(APPLICATION_JSON).content(payload))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value("TASK_LIST_NAME_REQUIRED"));
+        verifyNoInteractions(repository);
+    }
+
+    @Test
+    void reportsMissingOrFailedTaskListRename() throws Exception {
+        when(repository.updateListName("list-missing", "変更")).thenReturn(Optional.empty());
+        mvc.perform(patch("/api/task-lists/{id}/name", "list-missing").contentType(APPLICATION_JSON)
+                        .content("{\"name\":\"変更\"}"))
+                .andExpect(status().isNotFound())
+                .andExpect(jsonPath("$.code").value("TASK_LIST_NOT_FOUND"));
+
+        when(repository.updateListName("list-1", "変更")).thenThrow(mock(CosmosException.class));
+        mvc.perform(patch("/api/task-lists/{id}/name", "list-1").contentType(APPLICATION_JSON)
+                        .content("{\"name\":\"変更\"}"))
+                .andExpect(status().isServiceUnavailable())
+                .andExpect(jsonPath("$.code").value("TASK_STORAGE_UNAVAILABLE"));
+    }
 }
