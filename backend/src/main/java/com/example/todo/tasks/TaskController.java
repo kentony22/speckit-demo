@@ -102,9 +102,9 @@ class TaskController {
     record CreateTaskRequest(String name) {
     }
 
-    record TaskResponse(String id, String name, String createdAt, boolean completed, boolean important) {
+    record TaskResponse(String id, String name, String createdAt, boolean completed, boolean important, String listId) {
         static TaskResponse from(TaskDocument item) {
-            return new TaskResponse(item.id(), item.name(), item.createdAt(), item.completed(), item.important());
+            return new TaskResponse(item.id(), item.name(), item.createdAt(), item.completed(), item.important(), item.listId());
         }
     }
 

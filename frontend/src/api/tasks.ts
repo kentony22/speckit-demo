@@ -4,6 +4,7 @@ export type Task = {
     createdAt: string;
     completed: boolean;
     important: boolean;
+    listId?: string | null;
 };
 
 export function isBlankTaskName(name: string): boolean {
@@ -60,5 +61,32 @@ export function updateTaskImportance(id: string, important: boolean): Promise<Ta
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ important }),
+    });
+}
+
+export type TaskList = {
+    id: string;
+    name: string;
+};
+
+const taskListsPath = '/api/task-lists';
+
+export function listTaskLists(signal: AbortSignal): Promise<TaskList[]> {
+    return request<TaskList[]>(taskListsPath, { signal, cache: 'no-store' });
+}
+
+export function createTaskList(name: string): Promise<TaskList> {
+    return request<TaskList>(taskListsPath, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name }),
+    });
+}
+
+export function updateTaskList(id: string, listId: string | null): Promise<Task> {
+    return request<Task>(`${tasksPath}/${encodeURIComponent(id)}/list`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ listId }),
     });
 }

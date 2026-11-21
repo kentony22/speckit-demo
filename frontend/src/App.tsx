@@ -1,20 +1,16 @@
 import { useEffect, useRef, useState } from 'react';
 import type { KeyboardEvent } from 'react';
 import { createTask, isBlankTaskName, listTasks, TaskRequestError, updateTaskCompletion, updateTaskImportance } from './api/tasks';
-import type { Task } from './api/tasks';
+import type { Task, TaskList } from './api/tasks';
 import TaskNameEditor from './TaskNameEditor';
+import { TaskListMembership, TaskListNavigation, useTaskLists } from './TaskLists';
 
 type TaskUpdate = Partial<Omit<Task, 'id'>>;
-type TaskView = 'tasks' | 'important';
 type TaskStatusField = 'completed' | 'important';
 
-function readTaskView(): TaskView {
-    return window.location.hash === '#important' ? 'important' : 'tasks';
-}
-
-function TaskRow({ task, hidden, onUpdated }: {
+function TaskRow({ task, lists, onUpdated }: {
     task: Task;
-    hidden: boolean;
+    lists: TaskList[];
     onUpdated: (id: string, update: TaskUpdate) => void;
 }) {
     const inFlight = useRef(false);
@@ -40,7 +36,7 @@ function TaskRow({ task, hidden, onUpdated }: {
     }
 
     return (
-        <li hidden={hidden} className={`${hidden ? 'hidden' : 'flex'} items-start gap-3.5 rounded-xl bg-block px-4 py-4 shadow-xs sm:text-lg`}>
+        <li className="flex items-start gap-3.5 rounded-xl bg-block px-4 py-4 shadow-xs sm:text-lg">
             <button
                 type="button"
                 aria-label={`${task.name} の完了`}
@@ -58,6 +54,7 @@ function TaskRow({ task, hidden, onUpdated }: {
                 <TaskNameEditor task={task} onSaved={(name) => onUpdated(task.id, { name })} />
                 {saveState === 'saving' && <p role="status" className="mt-1 text-sm">保存中…</p>}
                 {saveState === 'error' && <p role="alert" className="mt-1 text-sm text-[#942e28]">状態を変更できませんでした。もう一度お試しください。</p>}
+                {lists.length > 0 && <TaskListMembership task={task} lists={lists} onUpdated={(updated) => onUpdated(updated.id, { listId: updated.listId })} />}
             </div>
             <button
                 type="button"
@@ -75,23 +72,13 @@ function TaskRow({ task, hidden, onUpdated }: {
 
 export default function App() {
     const [tasks, setTasks] = useState<Task[]>([]);
-    const [view, setView] = useState(readTaskView);
-    const isImportantView = view === 'important';
-    const hasVisibleTasks = isImportantView ? tasks.some((task) => task.important) : tasks.length > 0;
+    const taskLists = useTaskLists();
+    const { isImportantView, selectedList } = taskLists;
     const [loadState, setLoadState] = useState<'loading' | 'ready' | 'error'>('loading');
     const [loadAttempt, setLoadAttempt] = useState(0);
     const [name, setName] = useState('');
     const [saveError, setSaveError] = useState('');
     const [saving, setSaving] = useState(false);
-
-    useEffect(() => {
-        function updateView() {
-            setView(readTaskView());
-        }
-
-        window.addEventListener('hashchange', updateView);
-        return () => window.removeEventListener('hashchange', updateView);
-    }, []);
 
     useEffect(() => {
         const request = new AbortController();
@@ -142,36 +129,27 @@ export default function App() {
         }
     }
 
+    const visibleTasks = isImportantView
+        ? tasks.filter((task) => task.important)
+        : selectedList
+            ? tasks.filter((task) => task.listId === selectedList.id)
+            : tasks;
+
     return (
         <div className="grid min-h-dvh grid-rows-[auto_1fr] sm:grid-cols-[clamp(11rem,25vw,15rem)_minmax(0,1fr)] sm:grid-rows-[1fr]">
-            <aside className="flex items-center justify-between gap-4 bg-sidebar px-4 py-3.5 sm:flex-col sm:items-stretch sm:justify-start sm:gap-8 sm:px-4 sm:py-9">
+            <aside className="flex min-w-0 flex-col gap-4 bg-sidebar px-4 py-3.5 sm:gap-6 sm:py-9">
                 <div className="flex items-center gap-2.5 whitespace-nowrap font-bold sm:px-2 sm:text-lg">
                     <span aria-hidden="true" className="relative size-5 shrink-0 rounded-[4px] border-2 border-current after:absolute after:top-[2px] after:left-[5px] after:h-[9px] after:w-[5px] after:rotate-45 after:border-r-2 after:border-b-2" />
                     To Do
                 </div>
-                <nav aria-label="メイン">
-                    <div className="flex gap-1 sm:flex-col">
-                        <a
-                            href="#tasks"
-                            aria-current={view === 'tasks' ? 'page' : undefined}
-                            className="block rounded-lg px-3.5 py-2 font-semibold outline-offset-4 focus-visible:outline-2 aria-[current=page]:bg-selection sm:px-4 sm:py-3"
-                        >
-                            タスク
-                        </a>
-                        <a
-                            href="#important"
-                            aria-current={isImportantView ? 'page' : undefined}
-                            className="block rounded-lg px-3.5 py-2 font-semibold outline-offset-4 focus-visible:outline-2 aria-[current=page]:bg-selection sm:px-4 sm:py-3"
-                        >
-                            重要
-                        </a>
-                    </div>
-                </nav>
+                <TaskListNavigation {...taskLists} />
             </aside>
 
             <main className="flex min-w-0 flex-col bg-canvas">
                 <section id="tasks" aria-labelledby="tasks-heading" className="grow px-5 pt-7 pb-6 sm:px-8 sm:pt-10 lg:px-12">
-                    <h1 id="tasks-heading" className="mb-5 text-3xl font-extrabold tracking-tight sm:mb-6 sm:text-4xl">{isImportantView ? '重要' : 'タスク'}</h1>
+                    <h1 id="tasks-heading" className="mb-5 text-3xl font-extrabold tracking-tight wrap-anywhere sm:mb-6 sm:text-4xl">
+                        {isImportantView ? '重要' : selectedList?.name ?? 'すべてのタスク'}
+                    </h1>
                     {loadState === 'loading' && <p role="status">読み込み中…</p>}
                     {loadState === 'error' && (
                         <div role="alert" className="rounded-xl bg-block p-4 shadow-xs">
@@ -184,37 +162,44 @@ export default function App() {
                             </button>
                         </div>
                     )}
-                    {loadState === 'ready' && !hasVisibleTasks && (
+                    {loadState === 'ready' && visibleTasks.length === 0 && (
                         <p role="status" className="rounded-xl bg-block px-4 py-4 text-muted shadow-xs">
                             {isImportantView ? '重要なタスクはまだありません。' : 'タスクはまだありません。'}
                         </p>
                     )}
                     <ul className="space-y-3">
-                        {tasks.map((task) => (
-                            <TaskRow key={task.id} task={task} hidden={isImportantView && !task.important} onUpdated={updateTask} />
+                        {visibleTasks.map((task) => (
+                            <TaskRow
+                                key={task.id}
+                                task={task}
+                                lists={taskLists.lists}
+                                onUpdated={updateTask}
+                            />
                         ))}
                     </ul>
                 </section>
-                <div hidden={isImportantView} className="sticky bottom-0 bg-canvas px-5 pt-3 pb-[max(1rem,env(safe-area-inset-bottom))] sm:px-8 sm:pt-4 lg:px-12">
-                    <div className="relative">
-                        <span aria-hidden="true" className="pointer-events-none absolute top-1/2 left-4 size-5 -translate-y-1/2 rounded-full border-2 border-marker" />
-                        <input
-                            value={name}
-                            placeholder="タスクの追加"
-                            readOnly={saving}
-                            aria-label="タスクの追加"
-                            enterKeyHint="done"
-                            onKeyDown={handleInputKeyDown}
-                            onChange={(event) => {
-                                setName(event.target.value);
-                                setSaveError('');
-                            }}
-                            className="w-full rounded-xl bg-block py-4 pr-4 pl-[3.125rem] shadow-xs placeholder:text-muted focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent sm:text-lg"
-                        />
+                {!isImportantView && !selectedList && (
+                    <div className="sticky bottom-0 bg-canvas px-5 pt-3 pb-[max(1rem,env(safe-area-inset-bottom))] sm:px-8 sm:pt-4 lg:px-12">
+                        <div className="relative">
+                            <span aria-hidden="true" className="pointer-events-none absolute top-1/2 left-4 size-5 -translate-y-1/2 rounded-full border-2 border-marker" />
+                            <input
+                                value={name}
+                                placeholder="タスクの追加"
+                                readOnly={saving}
+                                aria-label="タスクの追加"
+                                enterKeyHint="done"
+                                onKeyDown={handleInputKeyDown}
+                                onChange={(event) => {
+                                    setName(event.target.value);
+                                    setSaveError('');
+                                }}
+                                className="w-full rounded-xl bg-block py-4 pr-4 pl-[3.125rem] shadow-xs placeholder:text-muted focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent sm:text-lg"
+                            />
+                        </div>
+                        {saving && <p role="status" className="mt-2 text-sm">登録中…</p>}
+                        {saveError && <p role="alert" className="mt-2 text-sm text-[#942e28]">{saveError}</p>}
                     </div>
-                    {saving && <p role="status" className="mt-2 text-sm">登録中…</p>}
-                    {saveError && <p role="alert" className="mt-2 text-sm text-[#942e28]">{saveError}</p>}
-                </div>
+                )}
             </main>
         </div>
     );
