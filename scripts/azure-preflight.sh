@@ -23,8 +23,8 @@ plan_id="$group_id/providers/Microsoft.Web/serverfarms/$AZURE_APP_SERVICE_PLAN"
 # Refuse to overwrite an existing plan with unexpected capacity or SKU.
 resources="$(az resource list --subscription "$AZURE_SUBSCRIPTION_ID" --resource-group "$AZURE_RESOURCE_GROUP" -o json)"
 if jq -e --arg id "$plan_id" 'any(.[]; (.id | ascii_downcase) == ($id | ascii_downcase))' <<< "$resources" > /dev/null; then
-    az appservice plan show -g "$AZURE_RESOURCE_GROUP" -n "$AZURE_APP_SERVICE_PLAN" -o json |
-        jq -e '.sku.name == "F1" and .sku.capacity == 1 and .reserved' > /dev/null
+    az appservice plan show --subscription "$AZURE_SUBSCRIPTION_ID" -g "$AZURE_RESOURCE_GROUP" -n "$AZURE_APP_SERVICE_PLAN" -o json |
+        jq -e '.sku.name == "F1" and .sku.capacity == 1 and ((.properties.reserved // .reserved) == true)' > /dev/null
 fi
 
 mkdir -p "${RUNNER_TEMP:-/tmp}/todo-azure"
