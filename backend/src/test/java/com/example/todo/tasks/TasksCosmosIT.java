@@ -1,7 +1,10 @@
 package com.example.todo.tasks;
 
 import com.azure.cosmos.CosmosContainer;
+import com.azure.cosmos.models.CosmosItemRequestOptions;
 import com.azure.cosmos.models.PartitionKey;
+import com.fasterxml.jackson.databind.node.BooleanNode;
+import com.fasterxml.jackson.databind.node.JsonNodeFactory;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
@@ -16,6 +19,7 @@ import java.util.UUID;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.http.MediaType.APPLICATION_JSON;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
@@ -47,6 +51,7 @@ class TasksCosmosIT {
                         .content("{\"name\":\"牛乳を買う\"}"))
                 .andExpect(status().isCreated())
                 .andExpect(jsonPath("$.name").value("牛乳を買う"))
+                .andExpect(jsonPath("$.completed").value(false))
                 .andReturn();
         var id = com.jayway.jsonpath.JsonPath.<String>read(created.getResponse().getContentAsString(), "$.id");
         try {
@@ -61,7 +66,68 @@ class TasksCosmosIT {
                     .andExpect(jsonPath("$[0].id").value(id))
                     .andExpect(jsonPath("$[0].name").value("牛乳を買う"));
         } finally {
-            container.deleteItem(id, new PartitionKey(OWNER_ID), new com.azure.cosmos.models.CosmosItemRequestOptions());
+            container.deleteItem(id, new PartitionKey(OWNER_ID), new CosmosItemRequestOptions());
+        }
+    }
+
+    @Test
+    void updatesALegacyTaskWithoutChangingItsOtherFields() throws Exception {
+        var id = UUID.randomUUID().toString();
+        var partition = new PartitionKey(OWNER_ID);
+        var legacy = JsonNodeFactory.instance.objectNode()
+                .put("id", id)
+                .put("ownerId", OWNER_ID)
+                .put("name", "以前のタスク")
+                .put("createdAt", "2026-11-21T00:00:00Z")
+                .put("legacyNote", "既存の追加項目");
+        container.createItem(legacy, partition, new CosmosItemRequestOptions());
+        try {
+            assertThat(container.readItem(id, partition, legacy.getClass()).getItem().has("completed")).isFalse();
+            mvc.perform(get("/api/tasks"))
+                    .andExpect(status().isOk())
+                    .andExpect(jsonPath("$[0].id").value(id))
+                    .andExpect(jsonPath("$[0].completed").value(false));
+
+            for (boolean completed : new boolean[] {true, true, false}) {
+                mvc.perform(patch("/api/tasks/{id}", id).contentType(APPLICATION_JSON)
+                                .content("{\"completed\":" + completed + "}"))
+                        .andExpect(status().isOk())
+                        .andExpect(jsonPath("$.id").value(id))
+                        .andExpect(jsonPath("$.completed").value(completed));
+                mvc.perform(get("/api/tasks"))
+                        .andExpect(status().isOk())
+                        .andExpect(jsonPath("$[0].id").value(id))
+                        .andExpect(jsonPath("$[0].completed").value(completed));
+
+                var stored = container.readItem(id, partition, legacy.getClass()).getItem();
+                assertThat(stored.get("completed")).isEqualTo(BooleanNode.valueOf(completed));
+                legacy.fields().forEachRemaining(field ->
+                        assertThat(stored.get(field.getKey())).isEqualTo(field.getValue()));
+            }
+        } finally {
+            container.deleteItem(id, partition, new CosmosItemRequestOptions());
+        }
+    }
+
+    @Test
+    void doesNotUpdateATaskInAnotherPartition() throws Exception {
+        var id = UUID.randomUUID().toString();
+        var otherOwner = OWNER_ID + "-other";
+        var partition = new PartitionKey(otherOwner);
+        var item = JsonNodeFactory.instance.objectNode()
+                .put("id", id)
+                .put("ownerId", otherOwner)
+                .put("name", "別の所有者のタスク")
+                .put("createdAt", "2026-11-21T00:00:00Z");
+        container.createItem(item, partition, new CosmosItemRequestOptions());
+        try {
+            mvc.perform(patch("/api/tasks/{id}", id).contentType(APPLICATION_JSON)
+                            .content("{\"completed\":true}"))
+                    .andExpect(status().isNotFound())
+                    .andExpect(jsonPath("$.code").value("TASK_NOT_FOUND"));
+            assertThat(container.readItem(id, partition, item.getClass()).getItem().has("completed")).isFalse();
+        } finally {
+            container.deleteItem(id, partition, new CosmosItemRequestOptions());
         }
     }
 }
