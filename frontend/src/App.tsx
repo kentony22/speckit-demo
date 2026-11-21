@@ -2,8 +2,11 @@ import { useEffect, useRef, useState } from 'react';
 import type { KeyboardEvent } from 'react';
 import { createTask, isBlankTaskName, listTasks, TaskRequestError, updateTaskCompletion } from './api/tasks';
 import type { Task } from './api/tasks';
+import TaskNameEditor from './TaskNameEditor';
 
-function TaskRow({ task, onUpdated }: { task: Task; onUpdated: (task: Task) => void }) {
+type TaskUpdate = Partial<Omit<Task, 'id'>>;
+
+function TaskRow({ task, onUpdated }: { task: Task; onUpdated: (id: string, update: TaskUpdate) => void }) {
     const inFlight = useRef(false);
     const [saveState, setSaveState] = useState<'idle' | 'saving' | 'error'>('idle');
 
@@ -15,7 +18,7 @@ function TaskRow({ task, onUpdated }: { task: Task; onUpdated: (task: Task) => v
         setSaveState('saving');
         try {
             const updated = await updateTaskCompletion(task.id, !task.completed);
-            onUpdated(updated);
+            onUpdated(updated.id, { completed: updated.completed });
             setSaveState('idle');
         } catch {
             setSaveState('error');
@@ -40,6 +43,7 @@ function TaskRow({ task, onUpdated }: { task: Task; onUpdated: (task: Task) => v
             </button>
             <div className="min-w-0">
                 <span className={`wrap-anywhere whitespace-pre-wrap ${task.completed ? 'text-muted line-through' : ''}`}>{task.name}</span>
+                <TaskNameEditor task={task} onSaved={(name) => onUpdated(task.id, { name })} />
                 {saveState === 'saving' && <p role="status" className="mt-1 text-sm">保存中…</p>}
                 {saveState === 'error' && <p role="alert" className="mt-1 text-sm text-[#942e28]">状態を変更できませんでした。もう一度お試しください。</p>}
             </div>
@@ -89,8 +93,8 @@ export default function App() {
         }
     }
 
-    function replaceTask(updated: Task) {
-        setTasks((items) => items.map((item) => item.id === updated.id ? updated : item));
+    function updateTask(id: string, update: TaskUpdate) {
+        setTasks((items) => items.map((item) => item.id === id ? { ...item, ...update } : item));
     }
 
     function handleInputKeyDown(event: KeyboardEvent<HTMLInputElement>) {
@@ -140,7 +144,7 @@ export default function App() {
                     )}
                     <ul className="space-y-3">
                         {tasks.map((task) => (
-                            <TaskRow key={task.id} task={task} onUpdated={replaceTask} />
+                            <TaskRow key={task.id} task={task} onUpdated={updateTask} />
                         ))}
                     </ul>
                 </section>

@@ -60,6 +60,34 @@ class TaskControllerTest {
     }
 
     @ParameterizedTest
+    @ValueSource(strings = {"", "{}", "{\"name\":null}", "{\"name\":\"\"}", "{\"name\":\"   \"}",
+            "{\"name\":\"　\"}", "{\"name\":123}"})
+    void rejectsInvalidRenameWithoutWriting(String payload) throws Exception {
+        mvc.perform(patch("/api/tasks/{id}/name", "id").contentType(APPLICATION_JSON).content(payload))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value("TASK_NAME_REQUIRED"));
+        verifyNoInteractions(repository);
+    }
+
+    @Test
+    void returnsMissingTaskOnRename() throws Exception {
+        when(repository.updateName("missing", "変更")).thenReturn(Optional.empty());
+        mvc.perform(patch("/api/tasks/{id}/name", "missing").contentType(APPLICATION_JSON)
+                        .content("{\"name\":\"変更\"}"))
+                .andExpect(status().isNotFound())
+                .andExpect(jsonPath("$.code").value("TASK_NOT_FOUND"));
+    }
+
+    @Test
+    void reportsFailedRename() throws Exception {
+        when(repository.updateName("id", "変更")).thenThrow(mock(CosmosException.class));
+        mvc.perform(patch("/api/tasks/{id}/name", "id").contentType(APPLICATION_JSON)
+                        .content("{\"name\":\"変更\"}"))
+                .andExpect(status().isServiceUnavailable())
+                .andExpect(jsonPath("$.code").value("TASK_STORAGE_UNAVAILABLE"));
+    }
+
+    @ParameterizedTest
     @ValueSource(strings = {"", "null", "{}", "{\"completed\":null}", "{\"completed\":\"true\"}",
             "{\"completed\":1}", "{\"completed\":[]}", "{\"completed\":{}}"})
     void rejectsNonBooleanCompletion(String payload) throws Exception {

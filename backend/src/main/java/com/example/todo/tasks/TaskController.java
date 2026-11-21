@@ -32,10 +32,21 @@ class TaskController {
     @PostMapping
     @ResponseStatus(HttpStatus.CREATED)
     TaskResponse create(@RequestBody(required = false) CreateTaskRequest request) {
-        if (request == null || request.name() == null || request.name().matches("(?U)\\s*")) {
+        return TaskResponse.from(repository.create(requireName(request == null ? null : request.name())));
+    }
+
+    @PatchMapping("/{id}/name")
+    TaskResponse updateName(@PathVariable String id, @RequestBody(required = false) JsonNode request) {
+        JsonNode value = request == null ? null : request.get("name");
+        String name = requireName(value != null && value.isString() ? value.stringValue() : null);
+        return repository.updateName(id, name).map(TaskResponse::from).orElseThrow(TaskNotFoundException::new);
+    }
+
+    private static String requireName(String name) {
+        if (name == null || name.matches("(?U)\\s*")) {
             throw new TaskNameRequiredException();
         }
-        return TaskResponse.from(repository.create(request.name()));
+        return name;
     }
 
     @PatchMapping("/{id}")
