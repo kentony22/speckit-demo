@@ -4,6 +4,7 @@ import { createTask, isBlankTaskName, listTasks, TaskRequestError, updateTaskCom
 import type { Task, TaskList } from './api/tasks';
 import TaskNameEditor from './TaskNameEditor';
 import { TaskListMembership, TaskListNavigation, useTaskLists } from './TaskLists';
+import { resolveVisibleTasks } from './taskSearch';
 
 type TaskUpdate = Partial<Omit<Task, 'id'>>;
 type TaskStatusField = 'completed' | 'important';
@@ -77,6 +78,7 @@ export default function App() {
     const [loadState, setLoadState] = useState<'loading' | 'ready' | 'error'>('loading');
     const [loadAttempt, setLoadAttempt] = useState(0);
     const [name, setName] = useState('');
+    const [searchQuery, setSearchQuery] = useState('');
     const [saveError, setSaveError] = useState('');
     const [saving, setSaving] = useState(false);
 
@@ -129,11 +131,12 @@ export default function App() {
         }
     }
 
-    const visibleTasks = isImportantView
+    const viewTasks = isImportantView
         ? tasks.filter((task) => task.important)
         : selectedList
             ? tasks.filter((task) => task.listId === selectedList.id)
             : tasks;
+    const { isSearching, tasks: visibleTasks } = resolveVisibleTasks(tasks, viewTasks, searchQuery);
 
     return (
         <div className="grid min-h-dvh grid-rows-[auto_1fr] sm:grid-cols-[clamp(11rem,25vw,15rem)_minmax(0,1fr)] sm:grid-rows-[1fr]">
@@ -150,6 +153,25 @@ export default function App() {
                     <h1 id="tasks-heading" className="mb-5 text-3xl font-extrabold tracking-tight wrap-anywhere sm:mb-6 sm:text-4xl">
                         {isImportantView ? '重要' : selectedList?.name ?? 'すべてのタスク'}
                     </h1>
+                    <div className="relative mb-5 sm:mb-6">
+                        <svg
+                            aria-hidden="true"
+                            viewBox="0 0 20 20"
+                            fill="none"
+                            className="pointer-events-none absolute top-1/2 left-4 size-5 -translate-y-1/2 text-marker"
+                        >
+                            <circle cx="9" cy="9" r="6" stroke="currentColor" strokeWidth="2" />
+                            <path d="M13.5 13.5L17.5 17.5" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+                        </svg>
+                        <input
+                            type="search"
+                            value={searchQuery}
+                            placeholder="タスク名を検索"
+                            aria-label="タスク名を検索"
+                            onChange={(event) => setSearchQuery(event.target.value)}
+                            className="w-full rounded-xl bg-block py-3 pr-4 pl-[3.125rem] shadow-xs placeholder:text-muted focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent sm:text-lg"
+                        />
+                    </div>
                     {loadState === 'loading' && <p role="status">読み込み中…</p>}
                     {loadState === 'error' && (
                         <div role="alert" className="rounded-xl bg-block p-4 shadow-xs">
@@ -164,7 +186,11 @@ export default function App() {
                     )}
                     {loadState === 'ready' && visibleTasks.length === 0 && (
                         <p role="status" className="rounded-xl bg-block px-4 py-4 text-muted shadow-xs">
-                            {isImportantView ? '重要なタスクはまだありません。' : 'タスクはまだありません。'}
+                            {isSearching
+                                ? '一致するタスクがありません'
+                                : isImportantView
+                                    ? '重要なタスクはまだありません。'
+                                    : 'タスクはまだありません。'}
                         </p>
                     )}
                     <ul className="space-y-3">
