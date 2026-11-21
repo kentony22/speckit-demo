@@ -3,6 +3,7 @@ import type { FormEvent } from 'react';
 import {
     createListGroup,
     createTaskList,
+    deleteListGroup,
     isBlankTaskName,
     listListGroups,
     listTaskLists,
@@ -71,6 +72,10 @@ export function useTaskLists() {
         updateList: (updated: TaskList) => setLists((items) => items.map((item) => item.id === updated.id ? updated : item)),
         addGroup: (group: ListGroup) => setGroups((items) => [...items, group]),
         updateGroup: (updated: ListGroup) => setGroups((items) => items.map((item) => item.id === updated.id ? updated : item)),
+        removeGroup: (groupId: string) => {
+            setGroups((items) => items.filter((item) => item.id !== groupId));
+            setLists((items) => items.map((item) => item.groupId === groupId ? { ...item, groupId: null } : item));
+        },
         retryLoad: () => {
             setLoadState('loading');
             setLoadAttempt((attempt) => attempt + 1);
@@ -216,6 +221,69 @@ export function TaskListNameEditor({
     );
 }
 
+function ListGroupDeleteConfirm({
+    group,
+    onDeleted,
+    onCancel,
+}: {
+    group: ListGroup;
+    onDeleted: (groupId: string) => void;
+    onCancel: () => void;
+}) {
+    const [deleting, setDeleting] = useState(false);
+    const [error, setError] = useState(false);
+    const inFlight = useRef(false);
+
+    async function confirmDelete() {
+        if (inFlight.current) {
+            return;
+        }
+        inFlight.current = true;
+        setDeleting(true);
+        setError(false);
+        try {
+            await deleteListGroup(group.id);
+            onDeleted(group.id);
+        } catch {
+            setError(true);
+        } finally {
+            inFlight.current = false;
+            setDeleting(false);
+        }
+    }
+
+    return (
+        <div className="space-y-1.5 rounded-lg border border-marker/40 bg-block p-2.5 text-xs shadow-xs">
+            <p className="font-semibold text-ink">
+                「{group.name}」を削除しますか？所属しているリストは未分類として残ります。
+            </p>
+            {error && (
+                <p role="alert" className="text-[#942e28]">
+                    グループを削除できませんでした。もう一度お試しください。
+                </p>
+            )}
+            <div className="flex flex-wrap gap-1.5 font-semibold">
+                <button
+                    type="button"
+                    disabled={deleting}
+                    onClick={() => void confirmDelete()}
+                    className="rounded bg-[#942e28] px-2.5 py-1 text-white disabled:opacity-50"
+                >
+                    {deleting ? '削除中…' : '削除する'}
+                </button>
+                <button
+                    type="button"
+                    disabled={deleting}
+                    onClick={onCancel}
+                    className="rounded px-2.5 py-1 text-accent disabled:opacity-50"
+                >
+                    キャンセル
+                </button>
+            </div>
+        </div>
+    );
+}
+
 export function TaskListNavigation({
     lists,
     loadState,
@@ -227,6 +295,7 @@ export function TaskListNavigation({
     updateList,
     addGroup,
     updateGroup,
+    removeGroup,
     retryLoad,
     retryGroupsLoad,
 }: ReturnType<typeof useTaskLists>) {
@@ -243,6 +312,7 @@ export function TaskListNavigation({
     const [collapsedGroups, setCollapsedGroups] = useState<Record<string, boolean>>({});
     const [editingGroupId, setEditingGroupId] = useState<string | null>(null);
     const [editingListId, setEditingListId] = useState<string | null>(null);
+    const [deletingGroupId, setDeletingGroupId] = useState<string | null>(null);
 
     const linkClass = 'block truncate rounded-lg px-3.5 py-2 outline-offset-4 focus-visible:outline-2 sm:px-4';
     const activeClass = 'bg-selection font-semibold text-ink';
@@ -359,6 +429,15 @@ export function TaskListNavigation({
                                     }}
                                     onCancel={() => setEditingGroupId(null)}
                                 />
+                            ) : deletingGroupId === group.id ? (
+                                <ListGroupDeleteConfirm
+                                    group={group}
+                                    onDeleted={(deletedId) => {
+                                        removeGroup(deletedId);
+                                        setDeletingGroupId(null);
+                                    }}
+                                    onCancel={() => setDeletingGroupId(null)}
+                                />
                             ) : (
                                 <div className="flex items-center gap-1">
                                     <button
@@ -375,10 +454,24 @@ export function TaskListNavigation({
                                     <button
                                         type="button"
                                         aria-label={`${group.name} の編集`}
-                                        onClick={() => setEditingGroupId(group.id)}
-                                        className="shrink-0 rounded px-2 py-1 text-xs font-semibold text-accent underline focus-visible:outline-2 focus-visible:outline-accent"
+                                        onClick={() => {
+                                            setDeletingGroupId(null);
+                                            setEditingGroupId(group.id);
+                                        }}
+                                        className="shrink-0 rounded px-1.5 py-1 text-xs font-semibold text-accent underline focus-visible:outline-2 focus-visible:outline-accent"
                                     >
                                         編集
+                                    </button>
+                                    <button
+                                        type="button"
+                                        aria-label={`${group.name} の削除`}
+                                        onClick={() => {
+                                            setEditingGroupId(null);
+                                            setDeletingGroupId(group.id);
+                                        }}
+                                        className="shrink-0 rounded px-1.5 py-1 text-xs font-semibold text-[#942e28] underline focus-visible:outline-2 focus-visible:outline-accent"
+                                    >
+                                        削除
                                     </button>
                                 </div>
                             )}

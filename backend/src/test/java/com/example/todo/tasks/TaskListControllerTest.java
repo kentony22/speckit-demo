@@ -16,6 +16,7 @@ import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 import static org.springframework.http.MediaType.APPLICATION_JSON;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
@@ -202,6 +203,27 @@ class TaskListControllerTest {
         when(repository.updateListName("list-1", "変更")).thenThrow(mock(CosmosException.class));
         mvc.perform(patch("/api/task-lists/{id}/name", "list-1").contentType(APPLICATION_JSON)
                         .content("{\"name\":\"変更\"}"))
+                .andExpect(status().isServiceUnavailable())
+                .andExpect(jsonPath("$.code").value("TASK_STORAGE_UNAVAILABLE"));
+    }
+
+    @Test
+    void deletesAGroup() throws Exception {
+        when(repository.deleteListGroup("group-1")).thenReturn(true);
+        mvc.perform(delete("/api/list-groups/{id}", "group-1"))
+                .andExpect(status().isNoContent())
+                .andExpect(content().string(""));
+    }
+
+    @Test
+    void reportsMissingOrFailedGroupDelete() throws Exception {
+        when(repository.deleteListGroup("group-missing")).thenReturn(false);
+        mvc.perform(delete("/api/list-groups/{id}", "group-missing"))
+                .andExpect(status().isNotFound())
+                .andExpect(jsonPath("$.code").value("LIST_GROUP_NOT_FOUND"));
+
+        when(repository.deleteListGroup("group-1")).thenThrow(mock(CosmosException.class));
+        mvc.perform(delete("/api/list-groups/{id}", "group-1"))
                 .andExpect(status().isServiceUnavailable())
                 .andExpect(jsonPath("$.code").value("TASK_STORAGE_UNAVAILABLE"));
     }

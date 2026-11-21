@@ -4,6 +4,7 @@ import com.azure.cosmos.CosmosException;
 import com.example.todo.tasks.TaskController.ErrorResponse;
 import com.example.todo.tasks.TaskController.TaskResponse;
 import org.springframework.http.HttpStatus;
+import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PatchMapping;
@@ -91,6 +92,14 @@ class TaskListController {
         return repository.updateListGroupName(id, name)
                 .map(GroupResponse::from)
                 .orElseThrow(() -> new MissingListOrTaskException("LIST_GROUP_NOT_FOUND"));
+    }
+
+    @DeleteMapping("/list-groups/{id}")
+    @ResponseStatus(HttpStatus.NO_CONTENT)
+    void deleteGroup(@PathVariable String id) {
+        if (!repository.deleteListGroup(id)) {
+            throw new MissingListOrTaskException("LIST_GROUP_NOT_FOUND");
+        }
     }
 
     @PatchMapping("/task-lists/{id}/group")

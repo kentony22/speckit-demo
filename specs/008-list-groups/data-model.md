@@ -7,6 +7,7 @@
 - `TaskListGroup.kind`: 固定値 `"list-group"`。タスク一覧・カスタムリスト一覧と文書種別を分離する。
 - `TaskListGroup.name`: 空白以外の文字を1文字以上含む文字列。空欄・半角空白のみ・全角空白のみは不可。変更時は `/name` のみを部分更新し、ID・所有者・作成時刻・所属するカスタムリストは変化しない。
 - `TaskListGroup.createdAt`: ISO-8601 UTC 形式の作成時刻。取得時は作成昇順（同時刻は `id` 昇順）。
+- `TaskListGroup` の削除は、同一 `ownerId` パーティション内の `"group-"` 文書のみを対象とする。削除時は、その `TaskListGroup.id` を `groupId` に持つすべての `TaskList` 文書の `groupId` を `null`（未分類）へ更新してからグループ文書を物理削除する。配下の `TaskList` 本体・`Task` 文書・他の `TaskListGroup` は削除しない。
 
 ## TaskList（既存エンティティの拡張）
 

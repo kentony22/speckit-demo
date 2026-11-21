@@ -411,6 +411,79 @@ class TaskListsCosmosIT {
         }
     }
 
+    @Test
+    void deletesAGroupAndMovesItsListsToUngroupedWithoutDeletingTasks() throws Exception {
+        var ids = new ArrayList<String>();
+        var deletedGroupId = "";
+        var deleted = false;
+        try {
+            deletedGroupId = createGroup("消すグループ", ids);
+            var keptGroupId = createGroup("残すグループ", ids);
+            var listId = createList("買い物", ids);
+            mvc.perform(patch("/api/task-lists/{id}/group", listId).contentType(APPLICATION_JSON)
+                            .content("{\"groupId\":\"" + deletedGroupId + "\"}"))
+                    .andExpect(status().isOk());
+
+            var taskCreated = mvc.perform(post("/api/tasks").contentType(APPLICATION_JSON)
+                            .content("{\"name\":\"牛乳を買う\"}"))
+                    .andExpect(status().isCreated())
+                    .andReturn();
+            String taskId = JsonPath.read(taskCreated.getResponse().getContentAsString(), "$.id");
+            ids.add(taskId);
+            mvc.perform(patch("/api/tasks/{id}/list", taskId).contentType(APPLICATION_JSON)
+                            .content("{\"listId\":\"" + listId + "\"}"))
+                    .andExpect(status().isOk());
+
+            mvc.perform(delete("/api/list-groups/{id}", deletedGroupId))
+                    .andExpect(status().isNoContent());
+            deleted = true;
+
+            mvc.perform(delete("/api/list-groups/{id}", deletedGroupId))
+                    .andExpect(status().isNotFound())
+                    .andExpect(jsonPath("$.code").value("LIST_GROUP_NOT_FOUND"));
+            mvc.perform(get("/api/list-groups"))
+                    .andExpect(status().isOk())
+                    .andExpect(jsonPath("$.length()").value(1))
+                    .andExpect(jsonPath("$[0].id").value(keptGroupId));
+            mvc.perform(get("/api/task-lists"))
+                    .andExpect(status().isOk())
+                    .andExpect(jsonPath("$.length()").value(1))
+                    .andExpect(jsonPath("$[0].id").value(listId))
+                    .andExpect(jsonPath("$[0].groupId").isEmpty());
+            mvc.perform(get("/api/tasks"))
+                    .andExpect(status().isOk())
+                    .andExpect(jsonPath("$.length()").value(1))
+                    .andExpect(jsonPath("$[0].id").value(taskId))
+                    .andExpect(jsonPath("$[0].listId").value(listId));
+
+            mvc.perform(delete("/api/list-groups/{id}", taskId))
+                    .andExpect(status().isNotFound())
+                    .andExpect(jsonPath("$.code").value("LIST_GROUP_NOT_FOUND"));
+            mvc.perform(delete("/api/list-groups/{id}", listId))
+                    .andExpect(status().isNotFound())
+                    .andExpect(jsonPath("$.code").value("LIST_GROUP_NOT_FOUND"));
+
+            var foreignGroupId = "group-" + UUID.randomUUID();
+            var otherOwner = OWNER_ID + "-other";
+            var foreignPartition = new PartitionKey(otherOwner);
+            var foreignGroup = new TaskListGroupDocument(foreignGroupId, otherOwner, TaskListGroupDocument.KIND, "他所有者のグループ", "2026-11-21T00:00:00Z");
+            container.createItem(foreignGroup, foreignPartition, new CosmosItemRequestOptions());
+            try {
+                mvc.perform(delete("/api/list-groups/{id}", foreignGroupId))
+                        .andExpect(status().isNotFound())
+                        .andExpect(jsonPath("$.code").value("LIST_GROUP_NOT_FOUND"));
+                assertThat(container.readItem(foreignGroupId, foreignPartition, TaskListGroupDocument.class).getItem().name())
+                        .isEqualTo("他所有者のグループ");
+            } finally {
+                container.deleteItem(foreignGroupId, foreignPartition, new CosmosItemRequestOptions());
+            }
+        } finally {
+            String skipId = deleted ? deletedGroupId : "";
+            ids.stream().filter(itemId -> !itemId.equals(skipId))
+                    .forEach(itemId -> container.deleteItem(itemId, PARTITION, new CosmosItemRequestOptions()));
+        }
+    }
+
     private String createList(String name, List<String> ids) throws Exception {
         var result = mvc.perform(post("/api/task-lists").contentType(APPLICATION_JSON)
                         .content("{\"name\":\"" + name + "\"}"))
