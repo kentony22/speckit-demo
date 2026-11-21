@@ -149,8 +149,8 @@ Japan West は採用する名前で、Linux F1・Java SE 25・Cosmos DB Free Tie
 ### Azure 配備と確認
 
 GitHub Environment `azure-learning-lab` は `main` のみに許可する。Entra アプリのフェデレーション対象は
-`repo:kentony22/speckit-demo:environment:azure-learning-lab`。環境変数として `AZURE_CLIENT_ID`、
-`AZURE_TENANT_ID`、`AZURE_SUBSCRIPTION_ID` を、環境シークレットとして `AZURE_VERIFIER_IPV4` を設定する。
+`repo:kentony22/speckit-demo:environment:azure-learning-lab`。`AZURE_CLIENT_ID`、`AZURE_TENANT_ID`、
+`AZURE_SUBSCRIPTION_ID`、`AZURE_VERIFIER_IPV4` は環境シークレットに設定する。
 配備 ID の Contributor 権限は `rg-todo-demo-jpw` に限る。無料枠の確認にはサブスクリプションの参照権限も使う。
 Web App のシステム割り当てマネージド ID には、Cosmos DB のアカウントメタデータ参照と、`tasks` の読み取り・登録に必要なデータ権限を付与する。
 
