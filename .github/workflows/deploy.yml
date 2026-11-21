@@ -19,7 +19,7 @@ on:
                 default: false
 
 concurrency:
-    group: azure-learning-lab-japanwest
+    group: azure-deployment
     cancel-in-progress: false
 
 permissions: {}
@@ -107,17 +107,17 @@ jobs:
         permissions:
             contents: read
             id-token: write
-        environment: azure-learning-lab
+        environment: ${{ vars.AZURE_ENVIRONMENT }}
         runs-on: ubuntu-24.04
         timeout-minutes: 25
         env:
             AZURE_SUBSCRIPTION_ID: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
             AZURE_CORE_OUTPUT: none
-            AZURE_LOCATION: japanwest
-            AZURE_RESOURCE_GROUP: rg-todo-demo-jpw
-            AZURE_APP_SERVICE_PLAN: asp-todo-learning-lab-jpw
-            AZURE_WEB_APP: app-todo-learning-lab-jpw
-            AZURE_COSMOS_ACCOUNT: cosmos-todo-learning-lab-jpw
+            AZURE_LOCATION: ${{ secrets.AZURE_LOCATION }}
+            AZURE_RESOURCE_GROUP: ${{ secrets.AZURE_RESOURCE_GROUP }}
+            AZURE_APP_SERVICE_PLAN: ${{ secrets.AZURE_APP_SERVICE_PLAN }}
+            AZURE_WEB_APP: ${{ secrets.AZURE_WEB_APP }}
+            AZURE_COSMOS_ACCOUNT: ${{ secrets.AZURE_COSMOS_ACCOUNT }}
             AZURE_VERIFIER_IPV4: ${{ secrets.AZURE_VERIFIER_IPV4 }}
         steps:
             - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7

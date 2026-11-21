@@ -119,8 +119,12 @@ App Service のアクセス制限で、SCM の既定動作が拒否であり `gi
 
 ### Azure 配備と確認
 
-配備は `main` の手動ワークフローから実行する。Azure への認証には OIDC を使う。
-Web App のシステム割り当てマネージド ID には、Cosmos DB のアカウントメタデータ参照と、`tasks` の読み取り・登録に必要なデータ権限を付与する。
+配備は `main` の手動ワークフロー（`.github/workflows/deploy.yml`）から実行する。Azure への認証には OIDC を使う。
+リポジトリの **Variables** に `AZURE_ENVIRONMENT`（使用する GitHub Environment 名）を設定し、対象の GitHub Environment の **Secrets** に以下を設定する。
+
+- **Environment Secrets**: `AZURE_CLIENT_ID`、`AZURE_TENANT_ID`、`AZURE_SUBSCRIPTION_ID`、`AZURE_VERIFIER_IPV4`、`AZURE_LOCATION`、`AZURE_RESOURCE_GROUP`、`AZURE_APP_SERVICE_PLAN`、`AZURE_WEB_APP`、`AZURE_COSMOS_ACCOUNT`
+
+Web App のシステム割り当てマネージド ID には、Cosmos DB のアカウントメタデータ参照と、`tasks` の読み取り・登録・更新・削除に必要なデータ権限を付与する。
 
 1. `Azure deployment` を `main` の `preview` モードで実行し、Summary のリソース差分と無料枠設定を確認する。
 2. 配備直前に Azure CLI へ利用者アカウントでログインし、サブスクリプション全体の Cosmos DB 無料枠、対象リージョンの Linux F1、Java SE 25 の提供状況を確認する。
