@@ -1,0 +1,139 @@
+name: Azure deployment
+run-name: Azure ${{ inputs.mode }}
+
+on:
+    workflow_dispatch:
+        inputs:
+            mode:
+                description: Preview or apply to Azure-Learning-Lab
+                required: true
+                type: choice
+                options: [preview, deploy]
+                default: preview
+            preview_run:
+                description: Successful preview run ID for this main commit (required for deploy)
+                type: string
+
+concurrency:
+    group: azure-learning-lab-japanwest
+    cancel-in-progress: false
+
+permissions:
+    contents: read
+    actions: read
+    id-token: write
+
+jobs:
+    azure:
+        name: Azure ${{ inputs.mode }}
+        if: github.ref == 'refs/heads/main'
+        environment: azure-learning-lab
+        runs-on: ubuntu-24.04
+        timeout-minutes: 25
+        env:
+            AZURE_SUBSCRIPTION_ID: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+            AZURE_CORE_OUTPUT: none
+            AZURE_LOCATION: japanwest
+            AZURE_RESOURCE_GROUP: rg-todo-demo-jpw
+            AZURE_APP_SERVICE_PLAN: asp-todo-learning-lab-jpw
+            AZURE_WEB_APP: app-todo-learning-lab-jpw
+            AZURE_COSMOS_ACCOUNT: cosmos-todo-learning-lab-jpw
+            AZURE_VERIFIER_IPV4: ${{ secrets.AZURE_VERIFIER_IPV4 }}
+        steps:
+            - uses: actions/checkout@v7
+              with:
+                  persist-credentials: false
+
+            - name: Require a successful preview of this commit
+              if: inputs.mode == 'deploy'
+              env:
+                  GH_TOKEN: ${{ github.token }}
+                  PREVIEW_RUN: ${{ inputs.preview_run }}
+              run: |
+                  [[ "$PREVIEW_RUN" =~ ^[0-9]+$ ]]
+                  gh api "repos/$GITHUB_REPOSITORY/actions/runs/$PREVIEW_RUN" |
+                      jq -e --arg sha "$GITHUB_SHA" '
+                        .path == ".github/workflows/deploy.yml" and .head_branch == "main" and
+                        .head_sha == $sha and .event == "workflow_dispatch" and
+                        .display_title == "Azure preview" and .conclusion == "success"
+                      ' > /dev/null
+
+            - uses: actions/setup-node@v7
+              if: inputs.mode == 'deploy'
+              with:
+                  node-version-file: frontend/.node-version
+                  cache: npm
+                  cache-dependency-path: frontend/package-lock.json
+
+            - uses: actions/setup-java@v6
+              if: inputs.mode == 'deploy'
+              with:
+                  distribution: temurin
+                  java-version: '25'
+                  cache: maven
+
+            - name: Build React
+              if: inputs.mode == 'deploy'
+              working-directory: frontend
+              run: |
+                  npm ci
+                  npm run build
+
+            - name: Test and package the executable JAR
+              if: inputs.mode == 'deploy'
+              run: |
+                  docker compose up -d cosmos
+                  truststore="$(./scripts/prepare-local-cosmos.sh)"
+                  cd backend
+                  JAVA_TOOL_OPTIONS="-Djavax.net.ssl.trustStore=\"$truststore\" -Djavax.net.ssl.trustStorePassword=changeit" \
+                      ./mvnw -B -ntp -Pbundled-web verify
+                  jar tf target/todo-0.1.0-SNAPSHOT.jar > "$RUNNER_TEMP/jar-entries"
+                  grep -Fx 'BOOT-INF/classes/static/index.html' "$RUNNER_TEMP/jar-entries"
+                  grep -E '^BOOT-INF/classes/static/assets/.+\.js$' "$RUNNER_TEMP/jar-entries"
+
+            - uses: azure/login@v2
+              with:
+                  client-id: ${{ secrets.AZURE_CLIENT_ID }}
+                  tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+                  subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+
+            - name: Install Bicep
+              run: az bicep install --version v0.49.2
+
+            - name: Validate free-tier settings and preview changes
+              env:
+                  DEPLOY_MODE: ${{ inputs.mode }}
+              run: ./scripts/azure-preflight.sh "$DEPLOY_MODE"
+
+            - name: Deploy the tested JAR using OIDC
+              if: inputs.mode == 'deploy'
+              run: ./scripts/azure-deploy-jar.sh backend/target/todo-0.1.0-SNAPSHOT.jar
+
+            - name: Report deployed settings and browser URL
+              if: inputs.mode == 'deploy'
+              run: |
+                  az appservice plan show -g "$AZURE_RESOURCE_GROUP" -n "$AZURE_APP_SERVICE_PLAN" -o json |
+                      jq -e '.sku.name == "F1" and .sku.capacity == 1 and .reserved'
+                  az webapp config show -g "$AZURE_RESOURCE_GROUP" -n "$AZURE_WEB_APP" -o json |
+                      jq -e --arg ip "$AZURE_VERIFIER_IPV4/32" '
+                          .linuxFxVersion == "JAVA|25-java25" and
+                          .ipSecurityRestrictionsDefaultAction == "Deny" and
+                          ([.ipSecurityRestrictions[] | select(.action == "Allow") | .ipAddress] == [$ip]) and
+                          .scmIpSecurityRestrictionsDefaultAction == "Deny" and
+                          all(.scmIpSecurityRestrictions[]?; .action != "Allow")
+                      '
+                  az cosmosdb show -g "$AZURE_RESOURCE_GROUP" -n "$AZURE_COSMOS_ACCOUNT" -o json |
+                      jq -e '.enableFreeTier and .disableLocalAuth and
+                          .capacity.totalThroughputLimit == 1000 and (.locations | length) == 1'
+                  az cosmosdb sql container throughput show -g "$AZURE_RESOURCE_GROUP" \
+                      -a "$AZURE_COSMOS_ACCOUNT" -d task-notebook -n tasks -o json |
+                      jq -e '.resource.throughput == 400 and (.resource.autoscaleSettings == null)'
+                  host="$(az webapp show -g "$AZURE_RESOURCE_GROUP" -n "$AZURE_WEB_APP" --query defaultHostName -o tsv)"
+                  for path in / /api/tasks; do
+                      status="$(curl -fsS --max-time 30 --output /dev/null --write-out '%{http_code}' "https://$host$path" || true)"
+                      if [[ "$status" != 403 ]]; then
+                          echo "Expected HTTP 403 outside the verifier network for $path, got $status." >&2
+                          exit 1
+                      fi
+                  done
+                  printf 'Browser verification from the allowed IP: https://%s/\n' "$host" >> "$GITHUB_STEP_SUMMARY"

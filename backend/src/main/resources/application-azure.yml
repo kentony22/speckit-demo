@@ -1,0 +1,6 @@
+todo:
+    cosmos:
+        endpoint: ${COSMOS_ENDPOINT}
+        database: ${COSMOS_DATABASE}
+        container: ${COSMOS_CONTAINER}
+    owner-id: demo-user

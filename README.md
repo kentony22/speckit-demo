@@ -97,3 +97,65 @@ PR の **Checks** タブで次の2つのジョブの結果を確認する。
   Java 用の証明書を準備して `./mvnw -B -ntp verify` を実行する。REST テストと Cosmos DB 結合テストが対象。
 
 エミュレーターはジョブ専用のランナー内で動く。Azure の接続情報は不要。
+
+## Azure の Bicep 定義
+
+[infra/main.bicep](infra/main.bicep) をリポジトリルートからコンパイルする。
+
+```bash
+az bicep build --file infra/main.bicep --stdout
+```
+
+`location`、`appServicePlanName`、`webAppName`、`cosmosAccountName` は配備時に指定する。
+Cosmos DB の `cosmosDatabaseName` と `cosmosContainerName` の既定値は `task-notebook` と `tasks`。
+
+リソース作成前に、対象サブスクリプションとリージョンで Linux F1・Java SE 25 と Cosmos DB 無料枠の利用可否を確認する。
+検証端末のパブリック IPv4 を `verifierIpv4` に指定する。Azure の画面と API はこの IP の `/32`
+だけを許可する。デモでは合成データを使う。SCM は別の制限を持ち、配備中だけ Actions ランナーの
+IP を一時許可する。SCM と FTP の基本認証は無効。
+
+### T015 — 配備先と無料枠
+
+| 設定 | 値 |
+| --- | --- |
+| サブスクリプション | `Azure-Learning-Lab`（`Enabled`） |
+| リージョン | Japan West（`japanwest`） |
+| リソースグループ | `rg-todo-demo-jpw` |
+| App Service プラン | `asp-todo-learning-lab-jpw` |
+| Web App | `app-todo-learning-lab-jpw` |
+| Cosmos DB アカウント | `cosmos-todo-learning-lab-jpw` |
+| Cosmos DB の DB・コンテナー | `task-notebook`・`tasks` |
+
+2026-11-21 に `Azure-Learning-Lab` を明示して以下を確認した。
+
+- `az appservice list-locations --sku F1 --linux-workers-enabled` の一覧に Japan West があり、
+  `az webapp list-runtimes --os linux --runtime java` で `JAVA:25-java25` が `Active`。
+- `Microsoft.Web` と `Microsoft.DocumentDB` は `Registered`。Japan West の App Service クォータ API は
+  リージョン合計で使用0・上限30を返した。F1 個別の数値は一覧になく、App Service の検証 API で
+  Linux F1 を1インスタンス指定した結果は `Success`。
+- `az cosmosdb list` はアカウント0件。既存の Free Tier アカウントはなく、Japan West は
+  `Microsoft.DocumentDB` の `databaseAccounts` の対応リージョン一覧に掲載されている。
+- App Service の名前確認 API で Web App 名は利用可能、`az cosmosdb check-name-exists` で
+  Cosmos DB のアカウント名は未使用。リソースグループは未作成。
+- 計画の固定400 RU/s（1リージョン）は無料枠の1,000 RU/s以内。短いタスク名を使うデモとして
+  1,000件を各1 KiBと仮定するとドキュメント本体は約1 MiB。インデックスを含む保存量は
+  無料枠の25 GB以内で管理する。[Cosmos DB Free Tier](https://learn.microsoft.com/ja-jp/azure/cosmos-db/free-tier)
+
+Japan East は構成全体の ARM 事前検証で F1 が `SubscriptionIsOverQuotaForSku`（上限0・必要1）となった。
+Japan West は採用する名前で、Linux F1・Java SE 25・Cosmos DB Free Tier を含む構成全体の
+`az deployment sub validate --validation-level ProviderNoRbac` が `Succeeded`。ARM what-if には
+予定どおりリソースグループと5リソースの作成が表示された。確認時にリソースは作成していない。
+
+### Azure 配備と確認
+
+GitHub Environment `azure-learning-lab` は `main` のみに許可する。Entra アプリのフェデレーション対象は
+`repo:kentony22/speckit-demo:environment:azure-learning-lab`。`AZURE_CLIENT_ID`、`AZURE_TENANT_ID`、
+`AZURE_SUBSCRIPTION_ID`、`AZURE_VERIFIER_IPV4` は環境シークレットに設定する。
+配備 ID の Contributor 権限は `rg-todo-demo-jpw` に限る。無料枠の確認にはサブスクリプションの参照権限も使う。
+Web App のシステム割り当てマネージド ID には、Cosmos DB のアカウントメタデータ参照と、`tasks` の読み取り・登録に必要なデータ権限を付与する。
+
+1. `Azure deployment` を `main` の `preview` モードで実行し、Summary のリソース差分と無料枠設定を確認する。
+2. 同じコミットで `deploy` モードを実行し、確認済み `preview` の実行 ID を指定する。
+   ワークフローは無料枠と差分を再検証し、`npm ci`、`npm run build`、Maven の `-Pbundled-web verify` で作った JAR を配備する。
+3. Summary の URL を許可した IP のブラウザーで開き、タスクを1件登録してから再読み込みし、登録内容を確認する。
+   Actions ランナーからは画面と API の両方が HTTP 403 になることを確認する。
