@@ -2,6 +2,7 @@ export type Task = {
     id: string;
     name: string;
     createdAt: string;
+    completed: boolean;
 };
 
 export function isBlankTaskName(name: string): boolean {
@@ -14,8 +15,10 @@ export class TaskRequestError extends Error {
     }
 }
 
-async function request<T>(options?: RequestInit): Promise<T> {
-    const response = await fetch('/api/tasks', options);
+const tasksPath = '/api/tasks';
+
+async function request<T>(path: string, options: RequestInit): Promise<T> {
+    const response = await fetch(path, options);
     if (!response.ok) {
         const body = await response.json().catch(() => null);
         throw new TaskRequestError(body?.code ?? 'TASK_REQUEST_FAILED');
@@ -24,13 +27,21 @@ async function request<T>(options?: RequestInit): Promise<T> {
 }
 
 export function listTasks(signal: AbortSignal): Promise<Task[]> {
-    return request<Task[]>({ signal, cache: 'no-store' });
+    return request<Task[]>(tasksPath, { signal, cache: 'no-store' });
 }
 
 export function createTask(name: string): Promise<Task> {
-    return request<Task>({
+    return request<Task>(tasksPath, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ name }),
+    });
+}
+
+export function updateTaskCompletion(id: string, completed: boolean): Promise<Task> {
+    return request<Task>(`${tasksPath}/${encodeURIComponent(id)}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ completed }),
     });
 }

@@ -1,15 +1,20 @@
 package com.example.todo.tasks;
 
 import com.azure.cosmos.CosmosContainer;
+import com.azure.cosmos.CosmosException;
 import com.azure.cosmos.models.CosmosItemRequestOptions;
+import com.azure.cosmos.models.CosmosPatchItemRequestOptions;
+import com.azure.cosmos.models.CosmosPatchOperations;
 import com.azure.cosmos.models.CosmosQueryRequestOptions;
 import com.azure.cosmos.models.PartitionKey;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Repository;
 
 import java.time.Instant;
 import java.util.Comparator;
 import java.util.List;
+import java.util.Optional;
 import java.util.UUID;
 
 @Repository
@@ -25,9 +30,24 @@ class CosmosTaskRepository {
     }
 
     TaskDocument create(String name) {
-        var item = new TaskDocument(UUID.randomUUID().toString(), ownerId, name, Instant.now().toString());
+        var item = new TaskDocument(UUID.randomUUID().toString(), ownerId, name, Instant.now().toString(), false);
         container.createItem(item, partitionKey, new CosmosItemRequestOptions());
         return item;
+    }
+
+    Optional<TaskDocument> updateCompletion(String id, boolean completed) {
+        var operations = CosmosPatchOperations.create().set("/completed", completed);
+        var options = new CosmosPatchItemRequestOptions();
+        options.setContentResponseOnWriteEnabled(true);
+        try {
+            var response = container.patchItem(id, partitionKey, operations, options, TaskDocument.class);
+            return Optional.of(response.getItem());
+        } catch (CosmosException error) {
+            if (error.getStatusCode() == HttpStatus.NOT_FOUND.value()) {
+                return Optional.empty();
+            }
+            throw error;
+        }
     }
 
     List<TaskDocument> findAll() {

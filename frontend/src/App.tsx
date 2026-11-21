@@ -1,7 +1,51 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import type { KeyboardEvent } from 'react';
-import { createTask, isBlankTaskName, listTasks, TaskRequestError } from './api/tasks';
+import { createTask, isBlankTaskName, listTasks, TaskRequestError, updateTaskCompletion } from './api/tasks';
 import type { Task } from './api/tasks';
+
+function TaskRow({ task, onUpdated }: { task: Task; onUpdated: (task: Task) => void }) {
+    const inFlight = useRef(false);
+    const [saveState, setSaveState] = useState<'idle' | 'saving' | 'error'>('idle');
+
+    async function toggleCompletion() {
+        if (inFlight.current) {
+            return;
+        }
+        inFlight.current = true;
+        setSaveState('saving');
+        try {
+            const updated = await updateTaskCompletion(task.id, !task.completed);
+            onUpdated(updated);
+            setSaveState('idle');
+        } catch {
+            setSaveState('error');
+        } finally {
+            inFlight.current = false;
+        }
+    }
+
+    return (
+        <li className="flex items-start gap-3.5 rounded-xl bg-block px-4 py-4 shadow-xs sm:text-lg">
+            <button
+                type="button"
+                aria-label={`${task.name} の完了`}
+                aria-pressed={task.completed}
+                aria-disabled={saveState === 'saving'}
+                onClick={toggleCompletion}
+                className="-my-1 -ml-1 grid size-8 shrink-0 place-items-center rounded-full focus-visible:outline-2 focus-visible:outline-accent aria-disabled:opacity-60"
+            >
+                <span aria-hidden="true" className={`grid size-5 place-items-center rounded-full border-2 border-marker text-sm leading-none font-bold ${task.completed ? 'bg-selection' : ''}`}>
+                    {task.completed && '✓'}
+                </span>
+            </button>
+            <div className="min-w-0">
+                <span className={`wrap-anywhere whitespace-pre-wrap ${task.completed ? 'text-muted line-through' : ''}`}>{task.name}</span>
+                {saveState === 'saving' && <p role="status" className="mt-1 text-sm">保存中…</p>}
+                {saveState === 'error' && <p role="alert" className="mt-1 text-sm text-[#942e28]">状態を変更できませんでした。もう一度お試しください。</p>}
+            </div>
+        </li>
+    );
+}
 
 export default function App() {
     const [tasks, setTasks] = useState<Task[]>([]);
@@ -43,6 +87,10 @@ export default function App() {
         } finally {
             setSaving(false);
         }
+    }
+
+    function replaceTask(updated: Task) {
+        setTasks((items) => items.map((item) => item.id === updated.id ? updated : item));
     }
 
     function handleInputKeyDown(event: KeyboardEvent<HTMLInputElement>) {
@@ -92,10 +140,7 @@ export default function App() {
                     )}
                     <ul className="space-y-3">
                         {tasks.map((task) => (
-                            <li key={task.id} className="flex items-start gap-3.5 rounded-xl bg-block px-4 py-4 shadow-xs sm:text-lg">
-                                <span aria-hidden="true" className="mt-[3px] size-5 shrink-0 rounded-full border-2 border-marker" />
-                                <span className="min-w-0 wrap-anywhere whitespace-pre-wrap">{task.name}</span>
-                            </li>
+                            <TaskRow key={task.id} task={task} onUpdated={replaceTask} />
                         ))}
                     </ul>
                 </section>
