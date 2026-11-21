@@ -5,6 +5,7 @@ import type { Task, TaskList } from './api/tasks';
 import TaskDeleteAction from './TaskDeleteAction';
 import TaskNameEditor from './TaskNameEditor';
 import { TaskListGroupAssignment, TaskListMembership, TaskListNameEditor, TaskListNavigation, useTaskLists } from './TaskLists';
+import { clearDeletedListFromTasks } from './taskListDeletion';
 import { resolveVisibleTasks } from './taskSearch';
 
 type TaskUpdate = Partial<Omit<Task, 'id'>>;
@@ -132,6 +133,11 @@ export default function App() {
         setTasks((items) => items.filter((item) => item.id !== id));
     }
 
+    function handleListDeleted(id: string) {
+        taskLists.removeList(id);
+        setTasks((items) => clearDeletedListFromTasks(items, id));
+    }
+
     function handleInputKeyDown(event: KeyboardEvent<HTMLInputElement>) {
         // IME confirmation may report key code 229 even when isComposing is false.
         if (event.key !== 'Enter' || event.nativeEvent.isComposing || event.nativeEvent.keyCode === 229) {
@@ -157,7 +163,7 @@ export default function App() {
                     <span aria-hidden="true" className="relative size-5 shrink-0 rounded-[4px] border-2 border-current after:absolute after:top-[2px] after:left-[5px] after:h-[9px] after:w-[5px] after:rotate-45 after:border-r-2 after:border-b-2" />
                     To Do
                 </div>
-                <TaskListNavigation {...taskLists} />
+                <TaskListNavigation {...taskLists} onListDeleted={handleListDeleted} />
             </aside>
 
             <main className="flex min-w-0 flex-col bg-canvas">

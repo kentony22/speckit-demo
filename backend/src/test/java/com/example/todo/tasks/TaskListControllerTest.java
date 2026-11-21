@@ -227,4 +227,29 @@ class TaskListControllerTest {
                 .andExpect(status().isServiceUnavailable())
                 .andExpect(jsonPath("$.code").value("TASK_STORAGE_UNAVAILABLE"));
     }
+
+    @Test
+    void deletesAList() throws Exception {
+        when(repository.deleteList("list-1")).thenReturn(true);
+        mvc.perform(delete("/api/task-lists/{id}", "list-1"))
+                .andExpect(status().isNoContent())
+                .andExpect(content().string(""));
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {"list-missing", "task-1", "group-1"})
+    void reportsMissingOrNonListDelete(String id) throws Exception {
+        when(repository.deleteList(id)).thenReturn(false);
+        mvc.perform(delete("/api/task-lists/{id}", id))
+                .andExpect(status().isNotFound())
+                .andExpect(jsonPath("$.code").value("TASK_LIST_NOT_FOUND"));
+    }
+
+    @Test
+    void reportsStorageFailureOnListDelete() throws Exception {
+        when(repository.deleteList("list-1")).thenThrow(mock(CosmosException.class));
+        mvc.perform(delete("/api/task-lists/{id}", "list-1"))
+                .andExpect(status().isServiceUnavailable())
+                .andExpect(jsonPath("$.code").value("TASK_STORAGE_UNAVAILABLE"));
+    }
 }
