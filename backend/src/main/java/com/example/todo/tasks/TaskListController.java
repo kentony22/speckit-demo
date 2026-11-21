@@ -56,6 +56,47 @@ class TaskListController {
                 .orElseThrow(() -> new MissingListOrTaskException("TASK_NOT_FOUND"));
     }
 
+    @GetMapping("/list-groups")
+    List<GroupResponse> listGroups() {
+        return repository.findListGroups().stream().map(GroupResponse::from).toList();
+    }
+
+    @PostMapping("/list-groups")
+    @ResponseStatus(HttpStatus.CREATED)
+    GroupResponse createGroup(@RequestBody(required = false) JsonNode request) {
+        var name = request == null ? null : request.path("name").stringValue(null);
+        if (name == null || name.matches("(?U)\\s*")) {
+            throw new InvalidListException("LIST_GROUP_NAME_REQUIRED");
+        }
+        return GroupResponse.from(repository.createListGroup(name));
+    }
+
+    @PatchMapping("/list-groups/{id}/name")
+    GroupResponse updateGroupName(@PathVariable String id, @RequestBody(required = false) JsonNode request) {
+        var name = request == null ? null : request.path("name").stringValue(null);
+        if (name == null || name.matches("(?U)\\s*")) {
+            throw new InvalidListException("LIST_GROUP_NAME_REQUIRED");
+        }
+        return repository.updateListGroupName(id, name)
+                .map(GroupResponse::from)
+                .orElseThrow(() -> new MissingListOrTaskException("LIST_GROUP_NOT_FOUND"));
+    }
+
+    @PatchMapping("/task-lists/{id}/group")
+    ListResponse updateListGroup(@PathVariable String id, @RequestBody(required = false) JsonNode request) {
+        var value = request == null ? null : request.path("groupId");
+        if (value == null || (!value.isNull() && (!value.isString() || value.stringValue().isBlank()))) {
+            throw new InvalidListException("LIST_GROUP_ID_INVALID");
+        }
+        String groupId = value.stringValue(null);
+        if (groupId != null && !repository.groupExists(groupId)) {
+            throw new MissingListOrTaskException("LIST_GROUP_NOT_FOUND");
+        }
+        return repository.updateListGroup(id, groupId)
+                .map(ListResponse::from)
+                .orElseThrow(() -> new MissingListOrTaskException("TASK_LIST_NOT_FOUND"));
+    }
+
     @ExceptionHandler(InvalidListException.class)
     @ResponseStatus(HttpStatus.BAD_REQUEST)
     ErrorResponse invalidInput(InvalidListException error) {
@@ -74,9 +115,15 @@ class TaskListController {
         return new ErrorResponse("TASK_STORAGE_UNAVAILABLE");
     }
 
-    record ListResponse(String id, String name) {
+    record ListResponse(String id, String name, String groupId) {
         static ListResponse from(TaskListDocument item) {
-            return new ListResponse(item.id(), item.name());
+            return new ListResponse(item.id(), item.name(), item.groupId());
+        }
+    }
+
+    record GroupResponse(String id, String name) {
+        static GroupResponse from(TaskListGroupDocument item) {
+            return new GroupResponse(item.id(), item.name());
         }
     }
 
