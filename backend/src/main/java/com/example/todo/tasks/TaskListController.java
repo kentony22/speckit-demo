@@ -53,6 +53,14 @@ class TaskListController {
                 .orElseThrow(() -> new MissingListOrTaskException("TASK_LIST_NOT_FOUND"));
     }
 
+    @DeleteMapping("/task-lists/{id}")
+    @ResponseStatus(HttpStatus.NO_CONTENT)
+    void deleteList(@PathVariable String id) {
+        if (!repository.deleteList(id)) {
+            throw new MissingListOrTaskException("TASK_LIST_NOT_FOUND");
+        }
+    }
+
     @PatchMapping("/tasks/{id}/list")
     TaskResponse updateList(@PathVariable String id, @RequestBody(required = false) JsonNode request) {
         var value = request == null ? null : request.path("listId");

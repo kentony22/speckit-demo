@@ -4,6 +4,7 @@ import {
     createListGroup,
     createTaskList,
     deleteListGroup,
+    deleteTaskList,
     isBlankTaskName,
     listListGroups,
     listTaskLists,
@@ -13,6 +14,7 @@ import {
     updateTaskListName,
 } from './api/tasks';
 import type { ListGroup, Task, TaskList } from './api/tasks';
+import { removeDeletedTaskList, resolveHashAfterListDelete } from './taskListDeletion';
 
 export function useTaskLists() {
     const [lists, setLists] = useState<TaskList[]>([]);
@@ -70,6 +72,14 @@ export function useTaskLists() {
         selectedList: lists.find((list) => list.id === hash),
         addList: (list: TaskList) => setLists((items) => [...items, list]),
         updateList: (updated: TaskList) => setLists((items) => items.map((item) => item.id === updated.id ? updated : item)),
+        removeList: (id: string) => {
+            setLists((items) => removeDeletedTaskList(items, id));
+            const nextHash = resolveHashAfterListDelete(hash, id);
+            if (nextHash !== hash) {
+                window.location.hash = `#${nextHash}`;
+                setHash(nextHash);
+            }
+        },
         addGroup: (group: ListGroup) => setGroups((items) => [...items, group]),
         updateGroup: (updated: ListGroup) => setGroups((items) => items.map((item) => item.id === updated.id ? updated : item)),
         removeGroup: (groupId: string) => {
@@ -267,7 +277,7 @@ function ListGroupDeleteConfirm({
                     type="button"
                     disabled={deleting}
                     onClick={() => void confirmDelete()}
-                    className="rounded bg-[#942e28] px-2.5 py-1 text-white disabled:opacity-50"
+                    className="rounded bg-[#942e28] px-2.5 py-1 text-white focus-visible:outline-2 focus-visible:outline-accent disabled:opacity-50"
                 >
                     {deleting ? '削除中…' : '削除する'}
                 </button>
@@ -275,7 +285,69 @@ function ListGroupDeleteConfirm({
                     type="button"
                     disabled={deleting}
                     onClick={onCancel}
-                    className="rounded px-2.5 py-1 text-accent disabled:opacity-50"
+                    className="rounded px-2.5 py-1 text-accent focus-visible:outline-2 focus-visible:outline-accent disabled:opacity-50"
+                >
+                    キャンセル
+                </button>
+            </div>
+        </div>
+    );
+}
+
+function TaskListDeleteConfirmation({
+    list,
+    onDeleted,
+    onCancel,
+}: {
+    list: TaskList;
+    onDeleted: (id: string) => void;
+    onCancel: () => void;
+}) {
+    const [deleting, setDeleting] = useState(false);
+    const [error, setError] = useState(false);
+    const inFlight = useRef(false);
+
+    async function confirmDelete() {
+        if (inFlight.current) {
+            return;
+        }
+        inFlight.current = true;
+        setDeleting(true);
+        setError(false);
+        try {
+            await deleteTaskList(list.id);
+            onDeleted(list.id);
+        } catch {
+            setError(true);
+        } finally {
+            inFlight.current = false;
+            setDeleting(false);
+        }
+    }
+
+    return (
+        <div className="space-y-1.5 rounded-lg bg-block p-2.5 text-xs shadow-xs">
+            <p className="font-semibold text-ink">「{list.name}」を削除しますか？</p>
+            <p className="text-muted">所属するタスクは削除されず「すべてのタスク」に残ります。</p>
+            {error && (
+                <p role="alert" className="text-[#942e28]">
+                    リストを削除できませんでした。もう一度お試しください。
+                </p>
+            )}
+            <div className="flex flex-wrap gap-1.5 font-semibold">
+                <button
+                    type="button"
+                    disabled={deleting}
+                    onClick={() => void confirmDelete()}
+                    className="rounded bg-[#942e28] px-2.5 py-1 text-white focus-visible:outline-2 focus-visible:outline-accent disabled:opacity-50"
+                >
+                    {deleting ? '削除中…' : '削除する'}
+                </button>
+                <button
+                    type="button"
+                    disabled={deleting}
+                    onClick={onCancel}
+                    className="rounded px-2.5 py-1 text-accent focus-visible:outline-2 focus-visible:outline-accent disabled:opacity-50"
                 >
                     キャンセル
                 </button>
@@ -298,7 +370,8 @@ export function TaskListNavigation({
     removeGroup,
     retryLoad,
     retryGroupsLoad,
-}: ReturnType<typeof useTaskLists>) {
+    onListDeleted,
+}: ReturnType<typeof useTaskLists> & { onListDeleted: (id: string) => void }) {
     const [name, setName] = useState('');
     const [error, setError] = useState('');
     const inFlight = useRef(false);
@@ -313,6 +386,7 @@ export function TaskListNavigation({
     const [editingGroupId, setEditingGroupId] = useState<string | null>(null);
     const [editingListId, setEditingListId] = useState<string | null>(null);
     const [deletingGroupId, setDeletingGroupId] = useState<string | null>(null);
+    const [deletingListId, setDeletingListId] = useState<string | null>(null);
 
     const linkClass = 'block truncate rounded-lg px-3.5 py-2 outline-offset-4 focus-visible:outline-2 sm:px-4';
     const activeClass = 'bg-selection font-semibold text-ink';
@@ -385,22 +459,49 @@ export function TaskListNavigation({
             );
         }
         return (
-            <div key={list.id} className="flex items-center gap-1">
-                <a
-                    href={`#${list.id}`}
-                    aria-current={selectedList?.id === list.id ? 'page' : undefined}
-                    className={`min-w-0 flex-1 ${linkClass} ${selectedList?.id === list.id ? activeClass : 'hover:bg-block'}`}
-                >
-                    {list.name}
-                </a>
-                <button
-                    type="button"
-                    aria-label={`${list.name} の編集`}
-                    onClick={() => setEditingListId(list.id)}
-                    className="shrink-0 rounded px-2 py-1 text-xs font-semibold text-accent underline focus-visible:outline-2 focus-visible:outline-accent"
-                >
-                    編集
-                </button>
+            <div key={list.id} className="space-y-1">
+                <div className="flex items-center gap-1">
+                    <a
+                        href={`#${list.id}`}
+                        aria-current={selectedList?.id === list.id ? 'page' : undefined}
+                        className={`${linkClass} min-w-0 flex-1 ${selectedList?.id === list.id ? activeClass : 'hover:bg-block'}`}
+                    >
+                        {list.name}
+                    </a>
+                    <button
+                        type="button"
+                        aria-label={`${list.name} の編集`}
+                        onClick={() => {
+                            setDeletingListId(null);
+                            setEditingListId(list.id);
+                        }}
+                        className="shrink-0 rounded px-1.5 py-1 text-xs font-semibold text-accent underline focus-visible:outline-2 focus-visible:outline-accent"
+                    >
+                        編集
+                    </button>
+                    <button
+                        type="button"
+                        aria-label={`${list.name} の削除`}
+                        onClick={() => {
+                            setEditingListId(null);
+                            setDeletingListId(list.id);
+                        }}
+                        className="shrink-0 rounded px-1.5 py-1 text-xs font-semibold text-[#942e28] underline focus-visible:outline-2 focus-visible:outline-accent"
+                    >
+                        削除
+                    </button>
+                </div>
+                {deletingListId === list.id && (
+                    <TaskListDeleteConfirmation
+                        key={list.id}
+                        list={list}
+                        onDeleted={(id) => {
+                            setDeletingListId(null);
+                            onListDeleted(id);
+                        }}
+                        onCancel={() => setDeletingListId(null)}
+                    />
+                )}
             </div>
         );
     }
@@ -480,7 +581,7 @@ export function TaskListNavigation({
                                     {groupLists.length === 0 ? (
                                         <p className="px-3.5 py-1.5 text-xs text-muted sm:px-4">リストはまだありません。</p>
                                     ) : (
-                                        groupLists.map((list) => renderListRow(list))
+                                        groupLists.map(renderListRow)
                                     )}
                                 </div>
                             )}
@@ -488,7 +589,7 @@ export function TaskListNavigation({
                     );
                 })}
 
-                {ungroupedLists.map((list) => renderListRow(list))}
+                {ungroupedLists.map(renderListRow)}
             </nav>
 
             <form onSubmit={create} className="grid gap-2">

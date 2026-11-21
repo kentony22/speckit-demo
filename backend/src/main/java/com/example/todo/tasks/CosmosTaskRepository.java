@@ -129,6 +129,29 @@ class CosmosTaskRepository {
         }
     }
 
+    boolean deleteList(String id) {
+        if (!listExists(id)) {
+            return false;
+        }
+        var options = new CosmosQueryRequestOptions().setPartitionKey(partitionKey);
+        var query = new SqlQuerySpec(
+                "SELECT * FROM c WHERE (NOT IS_DEFINED(c.kind) OR c.kind = 'task') AND c.listId = @listId",
+                new SqlParameter("@listId", id));
+        var clearList = CosmosPatchOperations.create().set("/listId", NullNode.getInstance());
+        for (TaskDocument task : container.queryItems(query, options, TaskDocument.class).stream().toList()) {
+            patchTask(task.id(), clearList);
+        }
+        try {
+            container.deleteItem(id, partitionKey, new CosmosItemRequestOptions());
+            return true;
+        } catch (CosmosException error) {
+            if (error.getStatusCode() == HttpStatus.NOT_FOUND.value()) {
+                return false;
+            }
+            throw error;
+        }
+    }
+
     TaskListGroupDocument createListGroup(String name) {
         var item = new TaskListGroupDocument(TaskListGroupDocument.ID_PREFIX + UUID.randomUUID(), ownerId,
                 TaskListGroupDocument.KIND, name, Instant.now().toString());

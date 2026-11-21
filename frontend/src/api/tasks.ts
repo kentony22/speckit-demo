@@ -98,6 +98,16 @@ export function updateTaskListName(listId: string, name: string): Promise<TaskLi
     });
 }
 
+export async function deleteTaskList(id: string): Promise<void> {
+    const response = await fetch(`${taskListsPath}/${encodeURIComponent(id)}`, {
+        method: 'DELETE',
+    });
+    if (!response.ok) {
+        const body = await response.json().catch(() => null);
+        throw new TaskRequestError(body?.code ?? 'TASK_REQUEST_FAILED');
+    }
+}
+
 export function listListGroups(signal: AbortSignal): Promise<ListGroup[]> {
     return request<ListGroup[]>(listGroupsPath, { signal, cache: 'no-store' });
 }

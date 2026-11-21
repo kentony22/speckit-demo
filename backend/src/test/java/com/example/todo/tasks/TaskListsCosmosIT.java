@@ -484,6 +484,160 @@ class TaskListsCosmosIT {
         }
     }
 
+    @Test
+    void deletesListAndLeavesItsTasksWithoutAList() throws Exception {
+        var ids = new ArrayList<String>();
+        var legacyTaskId = UUID.randomUUID().toString();
+        var legacyTask = JsonNodeFactory.instance.objectNode()
+                .put("id", legacyTaskId)
+                .put("ownerId", OWNER_ID)
+                .put("name", "旧形式の所属タスク")
+                .put("createdAt", "2026-11-21T00:00:00Z")
+                .put("completed", true)
+                .put("important", true)
+                .put("legacyNote", "保持する値");
+        container.createItem(legacyTask, PARTITION, new CosmosItemRequestOptions());
+        ids.add(legacyTaskId);
+        try {
+            var groupId = createGroup("プライベート", ids);
+            var shopping = createList("買い物", ids);
+            var work = createList("仕事", ids);
+            var emptyList = createList("空のリスト", ids);
+
+            mvc.perform(patch("/api/task-lists/{id}/group", shopping).contentType(APPLICATION_JSON)
+                            .content("{\"groupId\":\"" + groupId + "\"}"))
+                    .andExpect(status().isOk());
+
+            mvc.perform(patch("/api/tasks/{id}/list", legacyTaskId).contentType(APPLICATION_JSON)
+                            .content("{\"listId\":\"" + shopping + "\"}"))
+                    .andExpect(status().isOk());
+
+            var shoppingTaskCreated = mvc.perform(post("/api/tasks").contentType(APPLICATION_JSON)
+                            .content("{\"name\":\"牛乳を買う\"}"))
+                    .andExpect(status().isCreated())
+                    .andReturn();
+            String shoppingTaskId = JsonPath.read(shoppingTaskCreated.getResponse().getContentAsString(), "$.id");
+            ids.add(shoppingTaskId);
+            mvc.perform(patch("/api/tasks/{id}/list", shoppingTaskId).contentType(APPLICATION_JSON)
+                            .content("{\"listId\":\"" + shopping + "\"}"))
+                    .andExpect(status().isOk());
+
+            var workTaskCreated = mvc.perform(post("/api/tasks").contentType(APPLICATION_JSON)
+                            .content("{\"name\":\"報告書を書く\"}"))
+                    .andExpect(status().isCreated())
+                    .andReturn();
+            String workTaskId = JsonPath.read(workTaskCreated.getResponse().getContentAsString(), "$.id");
+            ids.add(workTaskId);
+            mvc.perform(patch("/api/tasks/{id}/list", workTaskId).contentType(APPLICATION_JSON)
+                            .content("{\"listId\":\"" + work + "\"}"))
+                    .andExpect(status().isOk());
+
+            mvc.perform(delete("/api/task-lists/{id}", emptyList))
+                    .andExpect(status().isNoContent());
+            ids.remove(emptyList);
+
+            mvc.perform(delete("/api/task-lists/{id}", shopping))
+                    .andExpect(status().isNoContent());
+            ids.remove(shopping);
+
+            mvc.perform(delete("/api/task-lists/{id}", shopping))
+                    .andExpect(status().isNotFound())
+                    .andExpect(jsonPath("$.code").value("TASK_LIST_NOT_FOUND"));
+
+            mvc.perform(get("/api/task-lists"))
+                    .andExpect(status().isOk())
+                    .andExpect(jsonPath("$.length()").value(1))
+                    .andExpect(jsonPath("$[0].id").value(work))
+                    .andExpect(jsonPath("$[0].name").value("仕事"));
+
+            mvc.perform(get("/api/list-groups"))
+                    .andExpect(status().isOk())
+                    .andExpect(jsonPath("$.length()").value(1))
+                    .andExpect(jsonPath("$[0].id").value(groupId))
+                    .andExpect(jsonPath("$[0].name").value("プライベート"));
+
+            var tasksBody = mvc.perform(get("/api/tasks"))
+                    .andExpect(status().isOk())
+                    .andExpect(jsonPath("$.length()").value(3))
+                    .andReturn()
+                    .getResponse()
+                    .getContentAsString();
+            List<java.util.Map<String, Object>> tasks = JsonPath.read(tasksBody, "$");
+            var tasksById = tasks.stream().collect(java.util.stream.Collectors.toMap(
+                    task -> (String) task.get("id"),
+                    task -> task));
+            assertThat(tasksById.get(workTaskId))
+                    .containsEntry("name", "報告書を書く")
+                    .containsEntry("listId", work);
+            assertThat(tasksById.get(shoppingTaskId))
+                    .containsEntry("name", "牛乳を買う")
+                    .containsEntry("listId", null);
+            assertThat(tasksById.get(legacyTaskId))
+                    .containsEntry("name", "旧形式の所属タスク")
+                    .containsEntry("completed", true)
+                    .containsEntry("important", true)
+                    .containsEntry("listId", null);
+
+            var storedLegacy = container.readItem(legacyTaskId, PARTITION, legacyTask.getClass()).getItem();
+            assertThat(storedLegacy.get("legacyNote").asText()).isEqualTo("保持する値");
+            assertThat(storedLegacy.get("listId").isNull()).isTrue();
+        } finally {
+            ids.forEach(itemId -> container.deleteItem(itemId, PARTITION, new CosmosItemRequestOptions()));
+        }
+    }
+
+    @Test
+    void rejectsDeletingMissingForeignOrNonListDocuments() throws Exception {
+        var ids = new ArrayList<String>();
+        try {
+            var ownList = createList("残るリスト", ids);
+            var ownGroup = createGroup("残るグループ", ids);
+            var created = mvc.perform(post("/api/tasks").contentType(APPLICATION_JSON)
+                            .content("{\"name\":\"残るタスク\"}"))
+                    .andExpect(status().isCreated())
+                    .andReturn();
+            String taskId = JsonPath.read(created.getResponse().getContentAsString(), "$.id");
+            ids.add(taskId);
+
+            var foreignListId = "list-" + UUID.randomUUID();
+            var otherOwner = OWNER_ID + "-other";
+            var foreignPartition = new PartitionKey(otherOwner);
+            var foreignList = JsonNodeFactory.instance.objectNode()
+                    .put("id", foreignListId)
+                    .put("ownerId", otherOwner)
+                    .put("kind", "task-list")
+                    .put("name", "他所有者のリスト")
+                    .put("createdAt", "2026-11-21T00:00:00Z");
+            container.createItem(foreignList, foreignPartition, new CosmosItemRequestOptions());
+            try {
+                for (String invalidTarget : List.of("list-" + UUID.randomUUID(), foreignListId, taskId, ownGroup)) {
+                    mvc.perform(delete("/api/task-lists/{id}", invalidTarget))
+                            .andExpect(status().isNotFound())
+                            .andExpect(jsonPath("$.code").value("TASK_LIST_NOT_FOUND"));
+                }
+                assertThat(container.readItem(foreignListId, foreignPartition, TaskListDocument.class).getItem().name())
+                        .isEqualTo("他所有者のリスト");
+            } finally {
+                container.deleteItem(foreignListId, foreignPartition, new CosmosItemRequestOptions());
+            }
+
+            mvc.perform(get("/api/task-lists"))
+                    .andExpect(status().isOk())
+                    .andExpect(jsonPath("$.length()").value(1))
+                    .andExpect(jsonPath("$[0].id").value(ownList));
+            mvc.perform(get("/api/list-groups"))
+                    .andExpect(status().isOk())
+                    .andExpect(jsonPath("$.length()").value(1))
+                    .andExpect(jsonPath("$[0].id").value(ownGroup));
+            mvc.perform(get("/api/tasks"))
+                    .andExpect(status().isOk())
+                    .andExpect(jsonPath("$.length()").value(1))
+                    .andExpect(jsonPath("$[0].id").value(taskId));
+        } finally {
+            ids.forEach(itemId -> container.deleteItem(itemId, PARTITION, new CosmosItemRequestOptions()));
+        }
+    }
+
     private String createList(String name, List<String> ids) throws Exception {
         var result = mvc.perform(post("/api/task-lists").contentType(APPLICATION_JSON)
                         .content("{\"name\":\"" + name + "\"}"))
