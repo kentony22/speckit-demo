@@ -4,7 +4,7 @@
 
 ## Summary
 
-一覧の各タスク行にインライン確認付きの削除操作を追加する。確認後に `DELETE /api/tasks/{id}` で Cosmos DB の対象タスク文書だけを物理削除し、成功時はクライアント側の全タスク一覧から対象1件を取り除くことで、「すべてのタスク」「重要」「カスタムリスト」「検索結果」のどの画面でも現在のビューや検索語を維持したまま反映する。Azure の既存タスク用データロールには項目削除アクションを追加する。
+タスクをクリックして開く詳細パネル下部にゴミ箱アイコンと確認ステップ付きの削除操作を配置する。確認後に `DELETE /api/tasks/{id}` で Cosmos DB の対象タスク文書だけを物理削除し、成功時はクライアント側の全タスク一覧から対象1件を取り除くことで、「タスク」「重要」「カスタムリスト」「検索結果」のどの画面でも現在のビューや検索語を維持したまま反映する。Azure の既存タスク用データロールには項目削除アクションを追加する。
 
 ## Technical Context
 
@@ -46,6 +46,6 @@
 - `backend/src/test/java/com/example/todo/tasks/TaskControllerTest.java` — HTTP 契約の単体テストを追加
 - `backend/src/test/java/com/example/todo/tasks/TasksCosmosIT.java` — 削除の永続化・他タスク/リスト保護・他パーティション拒否の結合テストを追加
 - `frontend/src/api/tasks.ts` — `deleteTask(id)` を追加
-- `frontend/src/TaskDeleteAction.tsx` — インライン確認・キャンセル・送信中・失敗時再試行の UI コンポーネントを追加
-- `frontend/src/App.tsx` — `TaskRow` に `TaskDeleteAction` を組み込み、`removeTask(id)` で状態更新
+- `frontend/src/TaskDeleteAction.tsx` — 詳細パネル下部向けのゴミ箱アイコン・インライン確認・キャンセル・送信中・失敗時再試行の UI コンポーネントを追加
+- `frontend/src/TaskDetailPanel.tsx` / `frontend/src/App.tsx` — `TaskDetailPanel` フッターに `TaskDeleteAction` を組み込み、`removeTask(id)` で状態更新と詳細パネル終了を行う
 - `infra/main.bicep` — 既存 `tasksRole` に `Microsoft.DocumentDB/databaseAccounts/sqlDatabases/containers/items/delete` を追加

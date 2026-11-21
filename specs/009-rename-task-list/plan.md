@@ -4,7 +4,7 @@
 
 ## Summary
 
-カスタムリストの名前を部分更新する `PATCH /api/task-lists/{id}/name` と、フロントエンドのインライン編集 UI を追加する。サーバー側は `list-*` 識別子かつ同一所有者パーティションのカスタムリスト文書のみ `/name` を部分更新し、`groupId` や配下タスクを保持する。フロントエンドは `useTaskLists` の単一状態（`lists`）を更新することで、左ナビゲーション・選択中リスト見出し・タスクの所属先選択欄へ即時反映する。
+カスタムリストの名前を部分更新する `PATCH /api/task-lists/{id}/name` と、フロントエンドのボタンなしインラインテキストボックス編集 UI を追加する。サーバー側は `list-*` 識別子かつ同一所有者パーティションのカスタムリスト文書のみ `/name` を部分更新し、`groupId` や配下タスクを保持する。フロントエンドは `useTaskLists` の単一状態（`lists`）を更新することで、左ナビゲーション・選択中リスト見出し・タスクの所属リスト表示へ即時反映する。
 
 ## Technical Context
 
@@ -46,5 +46,5 @@
 - `backend/src/test/java/com/example/todo/tasks/TaskListControllerTest.java` — HTTP 契約の MockMvc 単体テストを追加
 - `backend/src/test/java/com/example/todo/tasks/TaskListsCosmosIT.java` — リスト名変更の永続化・`groupId` とタスク保持・他所有者/タスク/グループ ID 拒否の結合テストを追加
 - `frontend/src/api/tasks.ts` — `updateTaskListName(listId, name)` を追加
-- `frontend/src/TaskLists.tsx` — `TaskListNameEditor` を追加し、`TaskListNavigation`（グループ配下・未分類リスト）からインラインでリスト名を編集できるようにする
-- `frontend/src/App.tsx` — カスタムリスト選択時のヘッダー付近からもリスト名を編集できるよう `TaskListNameEditor` を組み込む
+- `frontend/src/TaskLists.tsx` — ボタンなしのインラインテキストボックス編集（Enter／フォーカス外れで保存、Escape でキャンセル）を行う `TaskListNameEditor` を追加し、`TaskListNavigation`（グループ配下・未分類リスト）からインラインでリスト名を編集できるようにする
+- `frontend/src/App.tsx` — カスタムリスト選択時のメイン見出し自体を `TaskListNameEditor`（`variant="heading"`）として直接編集できるように組み込む

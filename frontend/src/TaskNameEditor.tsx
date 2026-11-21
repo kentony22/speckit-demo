@@ -1,28 +1,33 @@
-import { useId, useRef, useState } from 'react';
-import type { FormEvent } from 'react';
+import { useEffect, useId, useRef, useState } from 'react';
+import type { KeyboardEvent } from 'react';
 import { isBlankTaskName, updateTaskName } from './api/tasks';
 import type { Task } from './api/tasks';
 
 export default function TaskNameEditor({ task, onSaved }: { task: Task; onSaved: (name: string) => void }) {
-    const [draft, setDraft] = useState<string | null>(null);
+    const [draft, setDraft] = useState(task.name);
     const [error, setError] = useState<'blank' | 'save' | null>(null);
     const [saving, setSaving] = useState(false);
     const inFlight = useRef(false);
+    const skipBlurCommit = useRef(false);
+    const inputRef = useRef<HTMLInputElement>(null);
     const inputId = useId();
     const errorId = useId();
 
-    function closeEditor() {
-        setDraft(null);
+    useEffect(() => {
+        setDraft(task.name);
         setError(null);
-    }
+    }, [task.id, task.name]);
 
-    async function save(event: FormEvent<HTMLFormElement>) {
-        event.preventDefault();
-        if (draft === null || inFlight.current) {
+    async function commit() {
+        if (inFlight.current) {
             return;
         }
         if (isBlankTaskName(draft)) {
             setError('blank');
+            return;
+        }
+        if (draft === task.name) {
+            setError(null);
             return;
         }
         inFlight.current = true;
@@ -31,7 +36,7 @@ export default function TaskNameEditor({ task, onSaved }: { task: Task; onSaved:
         try {
             const updated = await updateTaskName(task.id, draft);
             onSaved(updated.name);
-            closeEditor();
+            setDraft(updated.name);
         } catch {
             setError('save');
         } finally {
@@ -40,45 +45,58 @@ export default function TaskNameEditor({ task, onSaved }: { task: Task; onSaved:
         }
     }
 
-    if (draft === null) {
-        return (
-            <button
-                type="button"
-                aria-label={`${task.name} の編集`}
-                className="ml-3 rounded text-sm font-semibold text-accent underline outline-offset-2 focus-visible:outline-2"
-                onClick={() => setDraft(task.name)}
-            >
-                編集
-            </button>
-        );
+    function handleKeyDown(event: KeyboardEvent<HTMLInputElement>) {
+        if (event.key === 'Escape') {
+            event.stopPropagation();
+            if (saving) {
+                return;
+            }
+            skipBlurCommit.current = true;
+            setDraft(task.name);
+            setError(null);
+            inputRef.current?.blur();
+            return;
+        }
+        if (event.key === 'Enter' && !event.nativeEvent.isComposing && event.nativeEvent.keyCode !== 229) {
+            event.preventDefault();
+            skipBlurCommit.current = true;
+            void commit().then(() => {
+                inputRef.current?.blur();
+            });
+        }
     }
+
     return (
-        <form onSubmit={save} className="mt-2 space-y-2">
-            <label htmlFor={inputId} className="block text-sm font-semibold">タスク名</label>
+        <div className="min-w-0 flex-1">
+            <label htmlFor={inputId} className="sr-only">タスク名</label>
             <input
-                autoFocus
+                ref={inputRef}
                 id={inputId}
                 value={draft}
                 readOnly={saving}
+                aria-label={`${task.name} の編集`}
                 aria-invalid={error === 'blank'}
                 aria-describedby={error ? errorId : undefined}
                 onChange={(event) => {
                     setDraft(event.target.value);
                     setError(null);
                 }}
-                className="w-full rounded-lg border border-marker px-3 py-2 outline-offset-2 focus-visible:outline-2 focus-visible:outline-accent"
+                onKeyDown={handleKeyDown}
+                onBlur={() => {
+                    if (skipBlurCommit.current) {
+                        skipBlurCommit.current = false;
+                        return;
+                    }
+                    void commit();
+                }}
+                className={`w-full rounded border border-transparent px-1.5 py-0.5 text-base font-semibold transition-colors hover:border-border focus:border-accent focus:bg-canvas focus:outline-none ${task.completed ? 'text-muted line-through' : 'text-ink'}`}
             />
-            {error && <p id={errorId} role="alert" className="text-sm text-[#942e28]">
-                {error === 'blank' ? '空白以外の文字を入力してください。' : 'タスク名を保存できませんでした。もう一度お試しください。'}
-            </p>}
-            <div className="flex flex-wrap gap-2 text-sm font-semibold">
-                <button type="submit" disabled={saving} className="rounded-lg bg-selection px-3 py-2 focus-visible:outline-2 disabled:opacity-60">
-                    {saving ? '保存中…' : '保存'}
-                </button>
-                <button type="button" disabled={saving} onClick={closeEditor} className="rounded-lg px-3 py-2 text-accent focus-visible:outline-2 disabled:opacity-60">
-                    キャンセル
-                </button>
-            </div>
-        </form>
+            {saving && <p role="status" className="mt-1 px-1.5 text-xs text-muted">保存中…</p>}
+            {error && (
+                <p id={errorId} role="alert" className="mt-1 px-1.5 text-xs text-danger">
+                    {error === 'blank' ? '空白以外の文字を入力してください。' : 'タスク名を保存できませんでした。もう一度お試しください。'}
+                </p>
+            )}
+        </div>
     );
 }

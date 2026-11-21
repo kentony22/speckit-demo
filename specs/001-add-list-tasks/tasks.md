@@ -8,7 +8,7 @@
 
 ## フェーズ1 — ローカルでタスク登録・一覧表示
 
-**目標** — 画面下部から登録し、Cosmos DB に保存したタスクを同じ画面で確認できるようにする。
+**目標** — 画面上部の入力欄から登録し、Cosmos DB に保存したタスクを同じ画面で確認できるようにする。
 
 ### セットアップと共通基盤
 
@@ -25,7 +25,7 @@
 - [X] T006 [P] [US1] `backend/src/main/java/com/example/todo/tasks/TaskDocument.java` と `backend/src/main/java/com/example/todo/tasks/CosmosTaskRepository.java` に JSON 保存と一覧取得を実装する。サーバーで UUID・UTC 作成日時・固定の所有者 ID を設定し、書き込みと一覧取得を同じ `/ownerId` に限定する。取得結果は全ページを読む。依存 T005。
 - [X] T007 [P] [US1] `frontend/src/api/tasks.ts` に `GET /api/tasks` と `POST /api/tasks` のクライアントを作り、成功応答と入力・保存・取得エラーを扱う。依存 T001。
 - [X] T008 [US1] `backend/src/main/java/com/example/todo/tasks/TaskController.java` に一覧と登録の REST API を実装する。計画どおり `200`・`201`・`400`・`503` を返し、空欄と半角・全角空白だけの名前を保存前に拒否する。依存 T006。
-- [X] T009 [US1] `frontend/src/App.tsx` と `frontend/src/index.css` にタスク一覧と画面下部の入力欄を実装する。初期取得で未登録と取得失敗を区別し、Enter で登録する。空欄・空白だけの状態ではリクエストもエラー表示も行わず、保存成功時に一覧を更新する。保存失敗時は入力と一覧を保ってエラーを表示する。依存 T007。
+- [X] T009 [US1] `frontend/src/App.tsx` と `frontend/src/index.css` にタスク一覧と画面上部のタスク追加欄を実装する。初期取得で未登録と取得失敗を区別し、Enter で登録する。空欄・空白だけの状態ではリクエストもエラー表示も行わず、保存成功時に一覧を更新する。保存失敗時は入力と一覧を保ってエラーを表示する。依存 T007。
 - [X] T010 [P] [US1] `backend/src/test/java/com/example/todo/tasks/TaskControllerTest.java` に REST テストを追加し、空の一覧、登録成功、欠落・空欄・半角／全角空白の拒否と書き込み未実行、保存・取得失敗時の応答を確認する。依存 T008。
 - [X] T011 [P] [US1] `backend/src/test/java/com/example/todo/tasks/TasksCosmosIT.java` と `backend/pom.xml` に結合テストと実行設定を追加し、分離したデータで REST の登録後に別の GET を行い、実際のエミュレーターから名前と ID を取得できることを確認する。依存 T008。
 - [X] T012 [US1] `README.md` にバージョン、Compose・証明書設定・Maven・Vite の起動とテスト手順を記載し、その手順で AC-001〜AC-005 と SC-001〜SC-003 を確認する。画面で0件表示、登録後の表示、3件の再読み込み、空欄と半角・全角空白の拒否、保存失敗時の表示と件数維持を確認して結果を記録する。依存 T009、T010、T011。

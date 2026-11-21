@@ -55,8 +55,8 @@ description: "リストグループ機能の実装タスク"
 
 - [X] T007 [US1] `backend/src/main/java/com/example/todo/tasks/TaskListController.java` に [contracts/list-groups.md](contracts/list-groups.md) と [data-model.md](data-model.md) の `TaskListGroup.name`・`TaskList.groupId` 制約に従う `GET/POST /api/list-groups`、`PATCH /api/list-groups/{id}/name` および `PATCH /api/task-lists/{id}/group` を実装し、`ListResponse` に `groupId` を含める
 - [X] T008 [P] [US1] `frontend/src/api/tasks.ts` に `ListGroup` 型、`TaskList.groupId`、`listListGroups`、`createListGroup`、`updateListGroupName`、`updateTaskListGroup` を追加する
-- [X] T009 [US1] `frontend/src/TaskLists.tsx` の `useTaskLists` にグループ取得・追加・名前更新・リスト更新を組み込み、`TaskListNavigation` にグループ開閉表示・グループ名インライン編集・未分類リスト表示・グループ作成フォーム、`TaskListGroupAssignment` に所属グループ切替 UI を実装する
-- [X] T010 [US1] `frontend/src/App.tsx` に `TaskListGroupAssignment` を組み込み、カスタムリスト表示中にグループの割り当て・移動・解除を操作できるようにする
+- [X] T009 [US1] `frontend/src/TaskLists.tsx` の `useTaskLists` にグループ取得・追加・名前更新・リスト更新を組み込み、`TaskListNavigation` にグループ開閉表示・ボタンなしインラインテキストボックスでのグループ名編集・未分類リスト表示・グループ作成フォームおよびリスト→グループのドラッグ＆ドロップ操作を実装する
+- [X] T010 [US1] `frontend/src/App.tsx` と `frontend/src/taskDragDrop.ts` にリスト→グループのドラッグ＆ドロップ割り当て・移動・解除連携を組み込む
 
 **Checkpoint**: US1 のバックエンド・フロントエンド・テストがすべて揃い、単独で検証できる。
 
