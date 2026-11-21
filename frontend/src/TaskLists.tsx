@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import type { FormEvent } from 'react';
+import type { DragEvent, FormEvent, KeyboardEvent } from 'react';
 import {
     createListGroup,
     createTaskList,
@@ -9,11 +9,21 @@ import {
     listListGroups,
     listTaskLists,
     updateListGroupName,
-    updateTaskList,
-    updateTaskListGroup,
     updateTaskListName,
 } from './api/tasks';
-import type { ListGroup, Task, TaskList } from './api/tasks';
+import type { ListGroup, TaskList } from './api/tasks';
+import {
+    ChevronIcon,
+    FolderIcon,
+    FolderPlusIcon,
+    HomeIcon,
+    ListIcon,
+    PencilIcon,
+    PlusIcon,
+    StarIcon,
+    TrashIcon,
+} from './Icons';
+import { LIST_DRAG_MIME, TASK_DRAG_MIME } from './taskDragDrop';
 import { removeDeletedTaskList, resolveHashAfterListDelete } from './taskListDeletion';
 
 export function useTaskLists() {
@@ -110,14 +120,18 @@ function ListGroupNameEditor({
     const [error, setError] = useState<'blank' | 'save' | null>(null);
     const [saving, setSaving] = useState(false);
     const inFlight = useRef(false);
+    const skipBlurCommit = useRef(false);
 
-    async function save(event: FormEvent<HTMLFormElement>) {
-        event.preventDefault();
+    async function commit() {
         if (inFlight.current) {
             return;
         }
         if (isBlankTaskName(draft)) {
             setError('blank');
+            return;
+        }
+        if (draft === group.name) {
+            onCancel();
             return;
         }
         inFlight.current = true;
@@ -133,53 +147,84 @@ function ListGroupNameEditor({
         }
     }
 
+    function handleKeyDown(event: KeyboardEvent<HTMLInputElement>) {
+        if (event.key === 'Escape') {
+            event.preventDefault();
+            if (saving) {
+                return;
+            }
+            skipBlurCommit.current = true;
+            onCancel();
+            return;
+        }
+        if (event.key === 'Enter' && !event.nativeEvent.isComposing && event.nativeEvent.keyCode !== 229) {
+            event.preventDefault();
+            skipBlurCommit.current = true;
+            void commit();
+        }
+    }
+
     return (
-        <form onSubmit={save} className="space-y-1.5 rounded-lg bg-block p-2 text-sm shadow-xs">
-            <input
-                autoFocus
-                value={draft}
-                readOnly={saving}
-                aria-label={`${group.name} のグループ名`}
-                aria-invalid={error === 'blank'}
-                onChange={(event) => {
-                    setDraft(event.target.value);
-                    setError(null);
-                }}
-                className="w-full rounded border border-marker px-2 py-1 text-sm focus-visible:outline-2 focus-visible:outline-accent"
-            />
+        <div className="px-4 py-1.5">
+            <div className="flex items-center gap-3">
+                <FolderIcon className="size-[18px] shrink-0 text-accent" />
+                <input
+                    autoFocus
+                    value={draft}
+                    readOnly={saving}
+                    aria-label={`${group.name} のグループ名`}
+                    aria-invalid={error === 'blank'}
+                    onChange={(event) => {
+                        setDraft(event.target.value);
+                        setError(null);
+                    }}
+                    onKeyDown={handleKeyDown}
+                    onBlur={() => {
+                        if (skipBlurCommit.current) {
+                            skipBlurCommit.current = false;
+                            return;
+                        }
+                        void commit();
+                    }}
+                    className="min-w-0 flex-1 rounded border border-accent bg-block px-2 py-1 text-sm font-medium text-ink focus:outline-none"
+                />
+            </div>
+            {saving && <p role="status" className="mt-1 pl-7 text-xs text-muted">保存中…</p>}
             {error && (
-                <p role="alert" className="text-xs text-[#942e28]">
+                <p role="alert" className="mt-1 pl-7 text-xs text-danger">
                     {error === 'blank' ? 'グループ名を入力してください。' : 'グループ名を変更できませんでした。もう一度お試しください。'}
                 </p>
             )}
-            <div className="flex flex-wrap gap-1.5 text-xs font-semibold">
-                <button type="submit" disabled={saving} className="rounded bg-accent px-2.5 py-1 text-white disabled:opacity-50">
-                    {saving ? '保存中…' : '保存'}
-                </button>
-                <button type="button" disabled={saving} onClick={onCancel} className="rounded px-2.5 py-1 text-accent disabled:opacity-50">
-                    キャンセル
-                </button>
-            </div>
-        </form>
+        </div>
     );
 }
 
 export function TaskListNameEditor({
     list,
+    variant = 'sidebar',
+    indented = false,
     onSaved,
     onCancel,
 }: {
     list: TaskList;
+    variant?: 'sidebar' | 'heading';
+    indented?: boolean;
     onSaved: (list: TaskList) => void;
-    onCancel: () => void;
+    onCancel?: () => void;
 }) {
     const [draft, setDraft] = useState(list.name);
     const [error, setError] = useState<'blank' | 'save' | null>(null);
     const [saving, setSaving] = useState(false);
     const inFlight = useRef(false);
+    const skipBlurCommit = useRef(false);
+    const inputRef = useRef<HTMLInputElement>(null);
 
-    async function save(event: FormEvent<HTMLFormElement>) {
-        event.preventDefault();
+    useEffect(() => {
+        setDraft(list.name);
+        setError(null);
+    }, [list.id, list.name]);
+
+    async function commit() {
         if (inFlight.current) {
             return;
         }
@@ -187,11 +232,18 @@ export function TaskListNameEditor({
             setError('blank');
             return;
         }
+        if (draft === list.name) {
+            setError(null);
+            onCancel?.();
+            return;
+        }
         inFlight.current = true;
         setSaving(true);
         setError(null);
         try {
-            onSaved(await updateTaskListName(list.id, draft));
+            const updated = await updateTaskListName(list.id, draft);
+            onSaved(updated);
+            setDraft(updated.name);
         } catch {
             setError('save');
         } finally {
@@ -200,34 +252,99 @@ export function TaskListNameEditor({
         }
     }
 
+    function handleKeyDown(event: KeyboardEvent<HTMLInputElement>) {
+        if (event.key === 'Escape') {
+            event.preventDefault();
+            if (saving) {
+                return;
+            }
+            skipBlurCommit.current = true;
+            setDraft(list.name);
+            setError(null);
+            if (onCancel) {
+                onCancel();
+            } else {
+                inputRef.current?.blur();
+            }
+            return;
+        }
+        if (event.key === 'Enter' && !event.nativeEvent.isComposing && event.nativeEvent.keyCode !== 229) {
+            event.preventDefault();
+            skipBlurCommit.current = true;
+            void commit().then(() => {
+                if (!onCancel) {
+                    inputRef.current?.blur();
+                }
+            });
+        }
+    }
+
+    if (variant === 'heading') {
+        return (
+            <div className="min-w-0 flex-1">
+                <input
+                    ref={inputRef}
+                    value={draft}
+                    readOnly={saving}
+                    aria-label={`${list.name} のリスト名`}
+                    aria-invalid={error === 'blank'}
+                    onChange={(event) => {
+                        setDraft(event.target.value);
+                        setError(null);
+                    }}
+                    onKeyDown={handleKeyDown}
+                    onBlur={() => {
+                        if (skipBlurCommit.current) {
+                            skipBlurCommit.current = false;
+                            return;
+                        }
+                        void commit();
+                    }}
+                    className="w-full max-w-md rounded border border-transparent bg-transparent px-1.5 py-0.5 text-2xl leading-8 font-semibold tracking-tight text-accent transition-colors hover:border-border hover:bg-block focus:border-accent focus:bg-block focus:outline-none"
+                />
+                {saving && <p role="status" className="mt-1 px-1.5 text-xs text-muted">保存中…</p>}
+                {error && (
+                    <p role="alert" className="mt-1 px-1.5 text-xs text-danger">
+                        {error === 'blank' ? 'リスト名を入力してください。' : 'リスト名を変更できませんでした。もう一度お試しください。'}
+                    </p>
+                )}
+            </div>
+        );
+    }
+
     return (
-        <form onSubmit={save} className="space-y-1.5 rounded-lg bg-block p-2 text-sm shadow-xs">
-            <input
-                autoFocus
-                value={draft}
-                readOnly={saving}
-                aria-label={`${list.name} のリスト名`}
-                aria-invalid={error === 'blank'}
-                onChange={(event) => {
-                    setDraft(event.target.value);
-                    setError(null);
-                }}
-                className="w-full rounded border border-marker px-2 py-1 text-sm focus-visible:outline-2 focus-visible:outline-accent"
-            />
+        <div className={`py-1.5 pr-4 ${indented ? 'pl-3' : 'pl-4'}`}>
+            <div className="flex items-center gap-3">
+                <ListIcon className="size-[18px] shrink-0 text-accent" />
+                <input
+                    ref={inputRef}
+                    autoFocus
+                    value={draft}
+                    readOnly={saving}
+                    aria-label={`${list.name} のリスト名`}
+                    aria-invalid={error === 'blank'}
+                    onChange={(event) => {
+                        setDraft(event.target.value);
+                        setError(null);
+                    }}
+                    onKeyDown={handleKeyDown}
+                    onBlur={() => {
+                        if (skipBlurCommit.current) {
+                            skipBlurCommit.current = false;
+                            return;
+                        }
+                        void commit();
+                    }}
+                    className="min-w-0 flex-1 rounded border border-accent bg-block px-2 py-1 text-sm text-ink focus:outline-none"
+                />
+            </div>
+            {saving && <p role="status" className="mt-1 pl-7 text-xs text-muted">保存中…</p>}
             {error && (
-                <p role="alert" className="text-xs text-[#942e28]">
+                <p role="alert" className="mt-1 pl-7 text-xs text-danger">
                     {error === 'blank' ? 'リスト名を入力してください。' : 'リスト名を変更できませんでした。もう一度お試しください。'}
                 </p>
             )}
-            <div className="flex flex-wrap gap-1.5 text-xs font-semibold">
-                <button type="submit" disabled={saving} className="rounded bg-accent px-2.5 py-1 text-white disabled:opacity-50">
-                    {saving ? '保存中…' : '保存'}
-                </button>
-                <button type="button" disabled={saving} onClick={onCancel} className="rounded px-2.5 py-1 text-accent disabled:opacity-50">
-                    キャンセル
-                </button>
-            </div>
-        </form>
+        </div>
     );
 }
 
@@ -263,12 +380,11 @@ function ListGroupDeleteConfirm({
     }
 
     return (
-        <div className="space-y-1.5 rounded-lg border border-marker/40 bg-block p-2.5 text-xs shadow-xs">
-            <p className="font-semibold text-ink">
-                「{group.name}」を削除しますか？所属しているリストは未分類として残ります。
-            </p>
+        <div className="mx-2 my-1 space-y-1.5 rounded-md border border-border bg-canvas p-2.5 text-xs shadow-xs">
+            <p className="font-semibold text-ink">「{group.name}」を削除しますか？</p>
+            <p className="text-muted">所属しているリストは未分類として残ります。</p>
             {error && (
-                <p role="alert" className="text-[#942e28]">
+                <p role="alert" className="text-danger">
                     グループを削除できませんでした。もう一度お試しください。
                 </p>
             )}
@@ -277,7 +393,7 @@ function ListGroupDeleteConfirm({
                     type="button"
                     disabled={deleting}
                     onClick={() => void confirmDelete()}
-                    className="rounded bg-[#942e28] px-2.5 py-1 text-white focus-visible:outline-2 focus-visible:outline-accent disabled:opacity-50"
+                    className="rounded bg-danger px-2.5 py-1 text-danger-fg transition-opacity hover:opacity-90 focus-visible:outline-2 focus-visible:outline-accent disabled:opacity-50"
                 >
                     {deleting ? '削除中…' : '削除する'}
                 </button>
@@ -285,7 +401,7 @@ function ListGroupDeleteConfirm({
                     type="button"
                     disabled={deleting}
                     onClick={onCancel}
-                    className="rounded px-2.5 py-1 text-accent focus-visible:outline-2 focus-visible:outline-accent disabled:opacity-50"
+                    className="rounded px-2.5 py-1 text-muted hover:bg-hover hover:text-ink focus-visible:outline-2 focus-visible:outline-accent disabled:opacity-50"
                 >
                     キャンセル
                 </button>
@@ -326,11 +442,11 @@ function TaskListDeleteConfirmation({
     }
 
     return (
-        <div className="space-y-1.5 rounded-lg bg-block p-2.5 text-xs shadow-xs">
+        <div className="mx-2 my-1 space-y-1.5 rounded-md border border-border bg-canvas p-2.5 text-xs shadow-xs">
             <p className="font-semibold text-ink">「{list.name}」を削除しますか？</p>
-            <p className="text-muted">所属するタスクは削除されず「すべてのタスク」に残ります。</p>
+            <p className="text-muted">所属するタスクは削除されず「タスク」に残ります。</p>
             {error && (
-                <p role="alert" className="text-[#942e28]">
+                <p role="alert" className="text-danger">
                     リストを削除できませんでした。もう一度お試しください。
                 </p>
             )}
@@ -339,7 +455,7 @@ function TaskListDeleteConfirmation({
                     type="button"
                     disabled={deleting}
                     onClick={() => void confirmDelete()}
-                    className="rounded bg-[#942e28] px-2.5 py-1 text-white focus-visible:outline-2 focus-visible:outline-accent disabled:opacity-50"
+                    className="rounded bg-danger px-2.5 py-1 text-danger-fg transition-opacity hover:opacity-90 focus-visible:outline-2 focus-visible:outline-accent disabled:opacity-50"
                 >
                     {deleting ? '削除中…' : '削除する'}
                 </button>
@@ -347,7 +463,7 @@ function TaskListDeleteConfirmation({
                     type="button"
                     disabled={deleting}
                     onClick={onCancel}
-                    className="rounded px-2.5 py-1 text-accent focus-visible:outline-2 focus-visible:outline-accent disabled:opacity-50"
+                    className="rounded px-2.5 py-1 text-muted hover:bg-hover hover:text-ink focus-visible:outline-2 focus-visible:outline-accent disabled:opacity-50"
                 >
                     キャンセル
                 </button>
@@ -355,6 +471,12 @@ function TaskListDeleteConfirmation({
         </div>
     );
 }
+
+type TaskCounts = {
+    all: number;
+    important: number;
+    byListId: Record<string, number>;
+};
 
 export function TaskListNavigation({
     lists,
@@ -370,8 +492,20 @@ export function TaskListNavigation({
     removeGroup,
     retryLoad,
     retryGroupsLoad,
+    counts,
+    draggingTaskId,
+    onDropTaskToList,
+    onDropListToGroup,
     onListDeleted,
-}: ReturnType<typeof useTaskLists> & { onListDeleted: (id: string) => void }) {
+    onNavigate,
+}: ReturnType<typeof useTaskLists> & {
+    counts: TaskCounts;
+    draggingTaskId: string | null;
+    onDropTaskToList: (taskId: string, targetListId: string | null) => void;
+    onDropListToGroup: (listId: string, targetGroupId: string | null) => void;
+    onListDeleted: (id: string) => void;
+    onNavigate?: () => void;
+}) {
     const [name, setName] = useState('');
     const [error, setError] = useState('');
     const inFlight = useRef(false);
@@ -387,15 +521,94 @@ export function TaskListNavigation({
     const [editingListId, setEditingListId] = useState<string | null>(null);
     const [deletingGroupId, setDeletingGroupId] = useState<string | null>(null);
     const [deletingListId, setDeletingListId] = useState<string | null>(null);
+    const [draggingListId, setDraggingListId] = useState<string | null>(null);
+    const [dropTargetKey, setDropTargetKey] = useState<string | null>(null);
 
-    const linkClass = 'block truncate rounded-lg px-3.5 py-2 outline-offset-4 focus-visible:outline-2 sm:px-4';
-    const activeClass = 'bg-selection font-semibold text-ink';
+    useEffect(() => {
+        if (!draggingTaskId && !draggingListId) {
+            setDropTargetKey(null);
+        }
+    }, [draggingTaskId, draggingListId]);
+
+    const isAllActive = !isImportantView && !selectedList;
+    const baseItem = 'relative flex items-center gap-3 px-4 py-2.5 text-sm transition-colors outline-offset-[-2px] focus-visible:outline-2 focus-visible:outline-accent';
+    const activeItem = 'bg-selection font-semibold text-ink before:absolute before:inset-y-1.5 before:left-0 before:w-[3px] before:rounded-r before:bg-accent';
+    const inactiveItem = 'text-ink hover:bg-hover';
+    const dropHighlight = 'bg-selection ring-2 ring-inset ring-accent';
 
     const groupIdSet = new Set(groups.map((group) => group.id));
     const ungroupedLists = lists.filter((list) => !list.groupId || !groupIdSet.has(list.groupId));
+    const draggedList = draggingListId ? lists.find((list) => list.id === draggingListId) : undefined;
 
     function toggleGroup(groupId: string) {
         setCollapsedGroups((prev) => ({ ...prev, [groupId]: !prev[groupId] }));
+    }
+
+    function hasTaskPayload(event: DragEvent): boolean {
+        return Boolean(draggingTaskId) || event.dataTransfer.types.includes(TASK_DRAG_MIME);
+    }
+
+    function hasListPayload(event: DragEvent): boolean {
+        return Boolean(draggingListId) || event.dataTransfer.types.includes(LIST_DRAG_MIME);
+    }
+
+    function readTaskId(event: DragEvent): string | null {
+        return event.dataTransfer.getData(TASK_DRAG_MIME) || draggingTaskId;
+    }
+
+    function readListId(event: DragEvent): string | null {
+        return event.dataTransfer.getData(LIST_DRAG_MIME) || draggingListId;
+    }
+
+    function handleTaskDragOver(event: DragEvent, targetKey: string) {
+        if (!hasTaskPayload(event)) {
+            return;
+        }
+        event.preventDefault();
+        event.dataTransfer.dropEffect = 'move';
+        if (dropTargetKey !== targetKey) {
+            setDropTargetKey(targetKey);
+        }
+    }
+
+    function handleTaskDrop(event: DragEvent, targetListId: string | null) {
+        if (!hasTaskPayload(event)) {
+            return;
+        }
+        event.preventDefault();
+        const taskId = readTaskId(event);
+        setDropTargetKey(null);
+        if (taskId) {
+            onDropTaskToList(taskId, targetListId);
+        }
+    }
+
+    function handleGroupDragOver(event: DragEvent, groupId: string) {
+        if (hasListPayload(event)) {
+            event.preventDefault();
+            event.dataTransfer.dropEffect = 'move';
+            if (dropTargetKey !== groupId) {
+                setDropTargetKey(groupId);
+            }
+            return;
+        }
+        if (hasTaskPayload(event) && collapsedGroups[groupId]) {
+            setCollapsedGroups((prev) => ({ ...prev, [groupId]: false }));
+        }
+    }
+
+    function handleGroupDrop(event: DragEvent, groupId: string) {
+        if (!hasListPayload(event)) {
+            return;
+        }
+        event.preventDefault();
+        const listId = readListId(event);
+        setDropTargetKey(null);
+        setDraggingListId(null);
+        if (listId) {
+            setCollapsedGroups((prev) => ({ ...prev, [groupId]: false }));
+            onDropListToGroup(listId, groupId);
+        }
     }
 
     async function create(event: FormEvent<HTMLFormElement>) {
@@ -444,12 +657,13 @@ export function TaskListNavigation({
         }
     }
 
-    function renderListRow(list: TaskList) {
+    function renderListRow(list: TaskList, indented = false) {
         if (editingListId === list.id) {
             return (
                 <TaskListNameEditor
                     key={list.id}
                     list={list}
+                    indented={indented}
                     onSaved={(updated) => {
                         updateList(updated);
                         setEditingListId(null);
@@ -458,38 +672,76 @@ export function TaskListNavigation({
                 />
             );
         }
+        const active = selectedList?.id === list.id;
+        const count = counts.byListId[list.id] ?? 0;
+        const isTaskDropOver = dropTargetKey === list.id && Boolean(draggingTaskId);
+        const isDraggingThisList = draggingListId === list.id;
         return (
-            <div key={list.id} className="space-y-1">
-                <div className="flex items-center gap-1">
+            <div key={list.id}>
+                <div
+                    draggable={deletingListId !== list.id}
+                    onDragStart={(event) => {
+                        event.dataTransfer.setData(LIST_DRAG_MIME, list.id);
+                        event.dataTransfer.setData('text/plain', list.name);
+                        event.dataTransfer.effectAllowed = 'move';
+                        setDraggingListId(list.id);
+                    }}
+                    onDragEnd={() => {
+                        setDraggingListId(null);
+                        setDropTargetKey(null);
+                    }}
+                    onDragOver={(event) => handleTaskDragOver(event, list.id)}
+                    onDragLeave={(event) => {
+                        if (!event.currentTarget.contains(event.relatedTarget as Node | null) && dropTargetKey === list.id) {
+                            setDropTargetKey(null);
+                        }
+                    }}
+                    onDrop={(event) => handleTaskDrop(event, list.id)}
+                    className={`group/item relative flex items-center transition-colors ${isTaskDropOver ? dropHighlight : active ? activeItem : inactiveItem} ${isDraggingThisList ? 'opacity-50' : ''}`}
+                >
                     <a
                         href={`#${list.id}`}
-                        aria-current={selectedList?.id === list.id ? 'page' : undefined}
-                        className={`${linkClass} min-w-0 flex-1 ${selectedList?.id === list.id ? activeClass : 'hover:bg-block'}`}
+                        draggable={false}
+                        onClick={onNavigate}
+                        aria-current={active ? 'page' : undefined}
+                        className={`flex min-w-0 flex-1 items-center gap-3 py-2.5 pr-1 text-sm outline-offset-[-2px] focus-visible:outline-2 focus-visible:outline-accent ${indented ? 'pl-3' : 'pl-4'}`}
                     >
-                        {list.name}
+                        <ListIcon className={`size-[18px] shrink-0 ${active || isTaskDropOver ? 'text-accent' : 'text-muted'}`} />
+                        <span className="min-w-0 flex-1 truncate">{list.name}</span>
+                        {isTaskDropOver ? (
+                            <span className="shrink-0 rounded bg-accent px-1.5 py-0.5 text-[10px] font-semibold text-accent-fg">
+                                移動
+                            </span>
+                        ) : (
+                            count > 0 && <span className="shrink-0 text-xs text-muted">{count}</span>
+                        )}
                     </a>
-                    <button
-                        type="button"
-                        aria-label={`${list.name} の編集`}
-                        onClick={() => {
-                            setDeletingListId(null);
-                            setEditingListId(list.id);
-                        }}
-                        className="shrink-0 rounded px-1.5 py-1 text-xs font-semibold text-accent underline focus-visible:outline-2 focus-visible:outline-accent"
-                    >
-                        編集
-                    </button>
-                    <button
-                        type="button"
-                        aria-label={`${list.name} の削除`}
-                        onClick={() => {
-                            setEditingListId(null);
-                            setDeletingListId(list.id);
-                        }}
-                        className="shrink-0 rounded px-1.5 py-1 text-xs font-semibold text-[#942e28] underline focus-visible:outline-2 focus-visible:outline-accent"
-                    >
-                        削除
-                    </button>
+                    <div className="flex shrink-0 items-center gap-0.5 pr-2 opacity-100 transition-opacity sm:opacity-0 sm:group-hover/item:opacity-100 sm:focus-within:opacity-100">
+                        <button
+                            type="button"
+                            aria-label={`${list.name} の編集`}
+                            title="リスト名を編集"
+                            onClick={() => {
+                                setDeletingListId(null);
+                                setEditingListId(list.id);
+                            }}
+                            className="grid size-6 place-items-center rounded text-muted hover:bg-block hover:text-accent focus-visible:outline-2 focus-visible:outline-accent"
+                        >
+                            <PencilIcon className="size-3.5" />
+                        </button>
+                        <button
+                            type="button"
+                            aria-label={`${list.name} の削除`}
+                            title="リストを削除"
+                            onClick={() => {
+                                setEditingListId(null);
+                                setDeletingListId(list.id);
+                            }}
+                            className="grid size-6 place-items-center rounded text-muted hover:bg-block hover:text-danger focus-visible:outline-2 focus-visible:outline-accent"
+                        >
+                            <TrashIcon className="size-3.5" />
+                        </button>
+                    </div>
                 </div>
                 {deletingListId === list.id && (
                     <TaskListDeleteConfirmation
@@ -506,21 +758,60 @@ export function TaskListNavigation({
         );
     }
 
+    const isTasksDropOver = dropTargetKey === 'tasks' && Boolean(draggingTaskId);
+    const isUngroupDropOver = dropTargetKey === 'ungrouped' && Boolean(draggingListId);
+
     return (
-        <>
-            <nav aria-label="メイン" className="min-w-0 space-y-1">
-                <a href="#tasks" aria-current={!isImportantView && !selectedList ? 'page' : undefined} className={`${linkClass} ${!isImportantView && !selectedList ? activeClass : 'hover:bg-block'}`}>
-                    すべてのタスク
+        <div className="flex min-h-0 flex-1 flex-col">
+            <nav aria-label="メイン" className="min-w-0 flex-1 overflow-y-auto py-2">
+                <a
+                    href="#important"
+                    onClick={onNavigate}
+                    aria-current={isImportantView ? 'page' : undefined}
+                    className={`${baseItem} ${isImportantView ? activeItem : inactiveItem}`}
+                >
+                    <StarIcon className={`size-[18px] shrink-0 ${isImportantView ? 'text-accent' : 'text-muted'}`} />
+                    <span className="min-w-0 flex-1 truncate">重要</span>
+                    {counts.important > 0 && <span className="text-xs text-muted">{counts.important}</span>}
                 </a>
-                <a href="#important" aria-current={isImportantView ? 'page' : undefined} className={`${linkClass} ${isImportantView ? activeClass : 'hover:bg-block'}`}>
-                    重要
+                <a
+                    href="#tasks"
+                    onClick={onNavigate}
+                    onDragOver={(event) => handleTaskDragOver(event, 'tasks')}
+                    onDragLeave={(event) => {
+                        if (!event.currentTarget.contains(event.relatedTarget as Node | null) && dropTargetKey === 'tasks') {
+                            setDropTargetKey(null);
+                        }
+                    }}
+                    onDrop={(event) => handleTaskDrop(event, null)}
+                    aria-current={isAllActive ? 'page' : undefined}
+                    className={`${baseItem} ${isTasksDropOver ? dropHighlight : isAllActive ? activeItem : inactiveItem}`}
+                >
+                    <HomeIcon className={`size-[18px] shrink-0 ${isAllActive || isTasksDropOver ? 'text-accent' : 'text-muted'}`} />
+                    <span className="min-w-0 flex-1 truncate">タスク</span>
+                    {isTasksDropOver ? (
+                        <span className="shrink-0 rounded bg-accent px-1.5 py-0.5 text-[10px] font-semibold text-accent-fg">
+                            リスト解除
+                        </span>
+                    ) : (
+                        counts.all > 0 && <span className="text-xs text-muted">{counts.all}</span>
+                    )}
                 </a>
+
+                <div className="my-2.5 border-t border-border" />
+
+                {draggingTaskId && (
+                    <p className="mx-3 mb-1.5 rounded border border-dashed border-accent/60 bg-selection/70 px-2.5 py-1 text-[11px] font-medium text-accent">
+                        リストへドロップして追加・移動（「タスク」で解除）
+                    </p>
+                )}
 
                 {groups.map((group) => {
                     const groupLists = lists.filter((list) => list.groupId === group.id);
                     const expanded = !collapsedGroups[group.id];
+                    const isGroupDropOver = dropTargetKey === group.id && Boolean(draggingListId);
                     return (
-                        <div key={group.id} className="pt-1">
+                        <div key={group.id}>
                             {editingGroupId === group.id ? (
                                 <ListGroupNameEditor
                                     group={group}
@@ -540,48 +831,69 @@ export function TaskListNavigation({
                                     onCancel={() => setDeletingGroupId(null)}
                                 />
                             ) : (
-                                <div className="flex items-center gap-1">
+                                <div
+                                    onDragOver={(event) => handleGroupDragOver(event, group.id)}
+                                    onDragLeave={(event) => {
+                                        if (!event.currentTarget.contains(event.relatedTarget as Node | null) && dropTargetKey === group.id) {
+                                            setDropTargetKey(null);
+                                        }
+                                    }}
+                                    onDrop={(event) => handleGroupDrop(event, group.id)}
+                                    className={`group/item flex items-center text-ink transition-colors ${isGroupDropOver ? dropHighlight : 'hover:bg-hover'}`}
+                                >
                                     <button
                                         type="button"
                                         aria-expanded={expanded}
                                         onClick={() => toggleGroup(group.id)}
-                                        className="flex min-w-0 flex-1 items-center justify-between gap-2 rounded-lg px-3.5 py-2 text-left text-sm font-semibold text-ink hover:bg-block focus-visible:outline-2 focus-visible:outline-accent sm:px-4"
+                                        className="flex min-w-0 flex-1 items-center gap-3 py-2.5 pr-1 pl-4 text-left text-sm font-medium outline-offset-[-2px] focus-visible:outline-2 focus-visible:outline-accent"
                                     >
-                                        <span className="min-w-0 truncate">{group.name}</span>
-                                        <span aria-hidden="true" className="shrink-0 text-xs text-muted">
-                                            {groupLists.length} {expanded ? '▾' : '▸'}
-                                        </span>
+                                        <FolderIcon className={`size-[18px] shrink-0 ${isGroupDropOver ? 'text-accent' : 'text-muted'}`} />
+                                        <span className="min-w-0 flex-1 truncate">{group.name}</span>
+                                        {isGroupDropOver ? (
+                                            <span className="shrink-0 rounded bg-accent px-1.5 py-0.5 text-[10px] font-semibold text-accent-fg">
+                                                追加
+                                            </span>
+                                        ) : (
+                                            <>
+                                                <span className="shrink-0 text-xs text-muted">{groupLists.length}</span>
+                                                <ChevronIcon open={expanded} className="size-3.5 shrink-0 text-muted" />
+                                            </>
+                                        )}
                                     </button>
-                                    <button
-                                        type="button"
-                                        aria-label={`${group.name} の編集`}
-                                        onClick={() => {
-                                            setDeletingGroupId(null);
-                                            setEditingGroupId(group.id);
-                                        }}
-                                        className="shrink-0 rounded px-1.5 py-1 text-xs font-semibold text-accent underline focus-visible:outline-2 focus-visible:outline-accent"
-                                    >
-                                        編集
-                                    </button>
-                                    <button
-                                        type="button"
-                                        aria-label={`${group.name} の削除`}
-                                        onClick={() => {
-                                            setEditingGroupId(null);
-                                            setDeletingGroupId(group.id);
-                                        }}
-                                        className="shrink-0 rounded px-1.5 py-1 text-xs font-semibold text-[#942e28] underline focus-visible:outline-2 focus-visible:outline-accent"
-                                    >
-                                        削除
-                                    </button>
+                                    <div className="flex shrink-0 items-center gap-0.5 pr-2 opacity-100 transition-opacity sm:opacity-0 sm:group-hover/item:opacity-100 sm:focus-within:opacity-100">
+                                        <button
+                                            type="button"
+                                            aria-label={`${group.name} の編集`}
+                                            title="グループ名を編集"
+                                            onClick={() => {
+                                                setDeletingGroupId(null);
+                                                setEditingGroupId(group.id);
+                                            }}
+                                            className="grid size-6 place-items-center rounded text-muted hover:bg-block hover:text-accent focus-visible:outline-2 focus-visible:outline-accent"
+                                        >
+                                            <PencilIcon className="size-3.5" />
+                                        </button>
+                                        <button
+                                            type="button"
+                                            aria-label={`${group.name} の削除`}
+                                            title="グループを削除"
+                                            onClick={() => {
+                                                setEditingGroupId(null);
+                                                setDeletingGroupId(group.id);
+                                            }}
+                                            className="grid size-6 place-items-center rounded text-muted hover:bg-block hover:text-danger focus-visible:outline-2 focus-visible:outline-accent"
+                                        >
+                                            <TrashIcon className="size-3.5" />
+                                        </button>
+                                    </div>
                                 </div>
                             )}
                             {expanded && (
-                                <div className="mt-1 space-y-1 pl-3">
+                                <div className="ml-6 border-l border-border">
                                     {groupLists.length === 0 ? (
-                                        <p className="px-3.5 py-1.5 text-xs text-muted sm:px-4">リストはまだありません。</p>
+                                        <p className="py-1.5 pr-4 pl-3 text-xs text-muted">リストはまだありません。</p>
                                     ) : (
-                                        groupLists.map(renderListRow)
+                                        groupLists.map((list) => renderListRow(list, true))
                                     )}
                                 </div>
                             )}
@@ -589,150 +901,129 @@ export function TaskListNavigation({
                     );
                 })}
 
-                {ungroupedLists.map(renderListRow)}
+                {draggedList?.groupId && (
+                    <div
+                        onDragOver={(event) => {
+                            if (!hasListPayload(event)) {
+                                return;
+                            }
+                            event.preventDefault();
+                            event.dataTransfer.dropEffect = 'move';
+                            if (dropTargetKey !== 'ungrouped') {
+                                setDropTargetKey('ungrouped');
+                            }
+                        }}
+                        onDragLeave={(event) => {
+                            if (!event.currentTarget.contains(event.relatedTarget as Node | null) && dropTargetKey === 'ungrouped') {
+                                setDropTargetKey(null);
+                            }
+                        }}
+                        onDrop={(event) => {
+                            if (!hasListPayload(event)) {
+                                return;
+                            }
+                            event.preventDefault();
+                            const listId = readListId(event);
+                            setDropTargetKey(null);
+                            setDraggingListId(null);
+                            if (listId) {
+                                onDropListToGroup(listId, null);
+                            }
+                        }}
+                        className={`mx-3 my-1.5 rounded border border-dashed px-2.5 py-2 text-center text-xs font-medium transition-colors ${isUngroupDropOver ? 'border-accent bg-selection text-accent' : 'border-border bg-canvas text-muted'}`}
+                    >
+                        ここにドロップしてグループから外す
+                    </div>
+                )}
+
+                {ungroupedLists.map((list) => renderListRow(list))}
+
+                <div className="mt-2 space-y-1 px-2">
+                    <form onSubmit={create}>
+                        <div className="flex items-center gap-2 rounded-md px-2 py-1.5 transition-colors focus-within:bg-hover hover:bg-hover">
+                            <PlusIcon className="size-[18px] shrink-0 text-accent" />
+                            <label htmlFor="task-list-name" className="sr-only">新しいリスト</label>
+                            <input
+                                id="task-list-name"
+                                value={name}
+                                placeholder="新しいリスト"
+                                disabled={saving || loadState !== 'ready'}
+                                aria-describedby={error ? 'task-list-create-error' : undefined}
+                                aria-invalid={error === 'リスト名を入力してください。'}
+                                onChange={(event) => {
+                                    setName(event.target.value);
+                                    setError('');
+                                }}
+                                className="min-w-0 flex-1 bg-transparent text-sm text-ink placeholder:text-accent focus:outline-none disabled:opacity-50"
+                            />
+                            {name.length > 0 && (
+                                <button
+                                    type="submit"
+                                    disabled={saving || loadState !== 'ready'}
+                                    className="shrink-0 rounded bg-accent px-2.5 py-1 text-xs font-semibold text-accent-fg transition-opacity hover:opacity-90 disabled:opacity-50"
+                                >
+                                    {saving ? '作成中…' : '追加'}
+                                </button>
+                            )}
+                        </div>
+                        {error && (
+                            <p id="task-list-create-error" role="alert" className="mt-1 px-2 text-xs text-danger">
+                                {error}
+                            </p>
+                        )}
+                        {loadState === 'error' && (
+                            <div role="alert" className="mt-2 rounded-md bg-canvas p-2.5 text-xs text-danger">
+                                <p>リストを取得できませんでした。</p>
+                                <button type="button" className="mt-1 font-semibold underline" onClick={retryLoad}>
+                                    再試行
+                                </button>
+                            </div>
+                        )}
+                    </form>
+
+                    <form onSubmit={createGroup}>
+                        <div className="flex items-center gap-2 rounded-md px-2 py-1.5 transition-colors focus-within:bg-hover hover:bg-hover">
+                            <FolderPlusIcon className="size-[18px] shrink-0 text-muted" />
+                            <label htmlFor="list-group-name" className="sr-only">新しいグループ</label>
+                            <input
+                                id="list-group-name"
+                                value={groupName}
+                                placeholder="新しいグループ"
+                                disabled={groupSaving || groupsLoadState !== 'ready'}
+                                aria-describedby={groupError ? 'list-group-create-error' : undefined}
+                                aria-invalid={groupError === 'グループ名を入力してください。'}
+                                onChange={(event) => {
+                                    setGroupName(event.target.value);
+                                    setGroupError('');
+                                }}
+                                className="min-w-0 flex-1 bg-transparent text-sm text-ink placeholder:text-muted focus:outline-none disabled:opacity-50"
+                            />
+                            {groupName.length > 0 && (
+                                <button
+                                    type="submit"
+                                    disabled={groupSaving || groupsLoadState !== 'ready'}
+                                    className="shrink-0 rounded bg-accent px-2.5 py-1 text-xs font-semibold text-accent-fg transition-opacity hover:opacity-90 disabled:opacity-50"
+                                >
+                                    {groupSaving ? '作成中…' : '追加'}
+                                </button>
+                            )}
+                        </div>
+                        {groupError && (
+                            <p id="list-group-create-error" role="alert" className="mt-1 px-2 text-xs text-danger">
+                                {groupError}
+                            </p>
+                        )}
+                        {groupsLoadState === 'error' && (
+                            <div role="alert" className="mt-2 rounded-md bg-canvas p-2.5 text-xs text-danger">
+                                <p>グループを取得できませんでした。</p>
+                                <button type="button" className="mt-1 font-semibold underline" onClick={retryGroupsLoad}>
+                                    再試行
+                                </button>
+                            </div>
+                        )}
+                    </form>
+                </div>
             </nav>
-
-            <form onSubmit={create} className="grid gap-2">
-                <label htmlFor="task-list-name" className="text-sm font-semibold">リスト名</label>
-                <input
-                    id="task-list-name"
-                    value={name}
-                    disabled={saving || loadState !== 'ready'}
-                    aria-describedby={error ? 'task-list-create-error' : undefined}
-                    aria-invalid={error === 'リスト名を入力してください。'}
-                    onChange={(event) => {
-                        setName(event.target.value);
-                        setError('');
-                    }}
-                    className="w-full rounded-lg bg-block px-3 py-2 text-sm shadow-xs focus-visible:outline-2 focus-visible:outline-accent"
-                />
-                <button type="submit" disabled={saving || loadState !== 'ready'} className="justify-self-start rounded-lg bg-accent px-3 py-2 text-sm font-semibold text-white disabled:opacity-50">
-                    {saving ? '作成中…' : 'リストを作成'}
-                </button>
-                {error && <p id="task-list-create-error" role="alert" className="text-sm text-[#942e28]">{error}</p>}
-                {loadState === 'error' && (
-                    <div role="alert" className="text-sm">
-                        <p>リストを取得できませんでした。</p>
-                        <button type="button" className="mt-1 font-semibold underline" onClick={retryLoad}>再試行</button>
-                    </div>
-                )}
-            </form>
-
-            <form onSubmit={createGroup} className="grid gap-2">
-                <label htmlFor="list-group-name" className="text-sm font-semibold">グループ名</label>
-                <input
-                    id="list-group-name"
-                    value={groupName}
-                    disabled={groupSaving || groupsLoadState !== 'ready'}
-                    aria-describedby={groupError ? 'list-group-create-error' : undefined}
-                    aria-invalid={groupError === 'グループ名を入力してください。'}
-                    onChange={(event) => {
-                        setGroupName(event.target.value);
-                        setGroupError('');
-                    }}
-                    className="w-full rounded-lg bg-block px-3 py-2 text-sm shadow-xs focus-visible:outline-2 focus-visible:outline-accent"
-                />
-                <button type="submit" disabled={groupSaving || groupsLoadState !== 'ready'} className="justify-self-start rounded-lg bg-accent px-3 py-2 text-sm font-semibold text-white disabled:opacity-50">
-                    {groupSaving ? '作成中…' : 'グループを作成'}
-                </button>
-                {groupError && <p id="list-group-create-error" role="alert" className="text-sm text-[#942e28]">{groupError}</p>}
-                {groupsLoadState === 'error' && (
-                    <div role="alert" className="text-sm">
-                        <p>グループを取得できませんでした。</p>
-                        <button type="button" className="mt-1 font-semibold underline" onClick={retryGroupsLoad}>再試行</button>
-                    </div>
-                )}
-            </form>
-        </>
-    );
-}
-
-export function TaskListGroupAssignment({
-    list,
-    groups,
-    onUpdated,
-}: {
-    list: TaskList;
-    groups: ListGroup[];
-    onUpdated: (list: TaskList) => void;
-}) {
-    const inFlight = useRef(false);
-    const [saveState, setSaveState] = useState<'idle' | 'saving' | 'error'>('idle');
-
-    async function changeGroup(value: string) {
-        if (inFlight.current) {
-            return;
-        }
-        inFlight.current = true;
-        setSaveState('saving');
-        try {
-            onUpdated(await updateTaskListGroup(list.id, value || null));
-            setSaveState('idle');
-        } catch {
-            setSaveState('error');
-        } finally {
-            inFlight.current = false;
-        }
-    }
-
-    return (
-        <div className="mb-4 text-sm">
-            <label className="flex flex-wrap items-center gap-2">
-                <span className="font-semibold text-muted">グループ</span>
-                <select
-                    aria-label={`${list.name} のグループ`}
-                    value={list.groupId ?? ''}
-                    disabled={saveState === 'saving'}
-                    onChange={(event) => void changeGroup(event.target.value)}
-                    className="min-w-0 max-w-full rounded-lg border border-marker bg-block px-2.5 py-1.5 focus-visible:outline-2 focus-visible:outline-accent disabled:opacity-60"
-                >
-                    <option value="">グループなし</option>
-                    {groups.map((group) => <option key={group.id} value={group.id}>{group.name}</option>)}
-                </select>
-            </label>
-            {saveState === 'saving' && <p role="status" className="mt-1">グループを保存中…</p>}
-            {saveState === 'error' && <p role="alert" className="mt-1 text-[#942e28]">グループを変更できませんでした。もう一度お試しください。</p>}
-        </div>
-    );
-}
-
-export function TaskListMembership({ task, lists, onUpdated }: { task: Task; lists: TaskList[]; onUpdated: (task: Task) => void }) {
-    const inFlight = useRef(false);
-    const [saveState, setSaveState] = useState<'idle' | 'saving' | 'error'>('idle');
-
-    async function changeList(value: string) {
-        if (inFlight.current) {
-            return;
-        }
-        inFlight.current = true;
-        setSaveState('saving');
-        try {
-            onUpdated(await updateTaskList(task.id, value || null));
-            setSaveState('idle');
-        } catch {
-            setSaveState('error');
-        } finally {
-            inFlight.current = false;
-        }
-    }
-
-    return (
-        <div className="mt-2 text-sm">
-            <label className="flex flex-wrap items-center gap-2">
-                <span className="text-muted">所属先</span>
-                <select
-                    aria-label={`${task.name} の所属先`}
-                    value={task.listId ?? ''}
-                    disabled={saveState === 'saving'}
-                    onChange={(event) => void changeList(event.target.value)}
-                    className="min-w-0 max-w-full rounded-lg border border-marker px-2 py-1 focus-visible:outline-2 focus-visible:outline-accent disabled:opacity-60"
-                >
-                    <option value="">リストなし</option>
-                    {lists.map((list) => <option key={list.id} value={list.id}>{list.name}</option>)}
-                </select>
-            </label>
-            {saveState === 'saving' && <p role="status" className="mt-1">所属先を保存中…</p>}
-            {saveState === 'error' && <p role="alert" className="mt-1 text-[#942e28]">所属先を変更できませんでした。もう一度お試しください。</p>}
         </div>
     );
 }

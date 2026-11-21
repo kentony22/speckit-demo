@@ -18,7 +18,7 @@
 
 ## Project Structure
 
-- `frontend/src/TaskNameEditor.tsx` に編集、入力エラー、キャンセル、再試行をまとめる。`frontend/src/App.tsx` の既存タスク行へ組み込む。
+- `frontend/src/TaskNameEditor.tsx` にボタンなしのインラインテキストボックス編集（Enter・フォーカス外れで保存、Escape でキャンセル、入力エラー、再試行）をまとめ、`frontend/src/TaskDetailPanel.tsx`（タスククリックで開く詳細パネル）へ組み込む。
 - `frontend/src/api/tasks.ts` に名前の更新を追加する。
 - `backend/src/main/java/com/example/todo/tasks/TaskController.java` と `CosmosTaskRepository.java` に検証と1項目の部分更新を追加する。
 - [データモデル](data-model.md)、[更新契約](contracts/task-name.md)、[判断記録](research.md)、[確認手順](quickstart.md) を参照する。

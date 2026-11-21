@@ -1,15 +1,39 @@
 @import "tailwindcss";
 
 @theme {
-    --font-sans: Inter, "Hiragino Sans", "Yu Gothic", system-ui, sans-serif;
-    --color-canvas: #eef1f5;
-    --color-sidebar: #e3e8ef;
+    --font-sans: "Segoe UI", Inter, "Hiragino Sans", "Yu Gothic", system-ui, sans-serif;
+    --color-header: #0f4c81;
+    --color-canvas: #faf9f8;
+    --color-sidebar: #ffffff;
     --color-block: #ffffff;
-    --color-ink: #152640;
-    --color-muted: #555a63;
-    --color-marker: #758295;
-    --color-selection: #b9d4ed;
-    --color-accent: #295680;
+    --color-ink: #292827;
+    --color-muted: #605e5c;
+    --color-marker: #8a8886;
+    --color-border: #edebe9;
+    --color-hover: #f3f2f1;
+    --color-selection: #eff6fc;
+    --color-accent: #2564cf;
+    --color-accent-fg: #ffffff;
+    --color-danger: #a4262c;
+    --color-danger-fg: #ffffff;
+}
+
+:root[data-theme="dark"] {
+    color-scheme: dark;
+    --color-header: #0b3962;
+    --color-canvas: #11100f;
+    --color-sidebar: #1b1a19;
+    --color-block: #252423;
+    --color-ink: #f3f2f1;
+    --color-muted: #b3b0ad;
+    --color-marker: #8a8886;
+    --color-border: #323130;
+    --color-hover: #2d2c2b;
+    --color-selection: #1f3349;
+    --color-accent: #70b5ff;
+    --color-accent-fg: #0b1929;
+    --color-danger: #f1707b;
+    --color-danger-fg: #1f090b;
 }
 
 @layer base {

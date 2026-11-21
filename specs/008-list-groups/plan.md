@@ -48,5 +48,5 @@
 - `backend/src/test/java/com/example/todo/tasks/TaskListControllerTest.java` — リストグループ HTTP 契約（削除含む）の MockMvc 単体テストを追加
 - `backend/src/test/java/com/example/todo/tasks/TaskListsCosmosIT.java` — グループ作成・名前変更・削除（配下リスト未分類化とタスク保持）・旧リストのグループ移動と解除・別所有者拒否・タスク操作からのグループ ID 保護の結合テストを追加
 - `frontend/src/api/tasks.ts` — `ListGroup` 型、`TaskList.groupId`、`listListGroups`、`createListGroup`、`updateListGroupName`、`deleteListGroup`、`updateTaskListGroup` を追加
-- `frontend/src/TaskLists.tsx` — `useTaskLists` にグループ状態・削除時の配下リスト未分類化を追加し、`TaskListNavigation` にグループ開閉表示・グループ名編集・確認付きグループ削除・グループ作成フォーム、`TaskListGroupAssignment` に所属グループ切替を追加
-- `frontend/src/App.tsx` — カスタムリスト表示時に `TaskListGroupAssignment` を組み込む
+- `frontend/src/TaskLists.tsx` — `useTaskLists` にグループ状態・削除時の配下リスト未分類化を追加し、`TaskListNavigation` にグループ開閉表示・インラインテキストボックスでのグループ名編集（Enter／フォーカス外れで保存、Escape でキャンセル）・確認付きグループ削除・グループ作成フォーム、およびカスタムリストのグループ間ドラッグ＆ドロップ割り当て／移動／解除を追加
+- `frontend/src/App.tsx` / `frontend/src/taskDragDrop.ts` — ドラッグ＆ドロップでのリスト→グループ移動・解除（`onDropListToGroup`）とエラー通知を連携

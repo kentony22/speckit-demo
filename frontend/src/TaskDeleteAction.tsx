@@ -1,9 +1,19 @@
 import { useRef, useState } from 'react';
 import { deleteTask } from './api/tasks';
 import type { Task } from './api/tasks';
+import { TrashIcon } from './Icons';
 
-export default function TaskDeleteAction({ task, onDeleted }: { task: Task; onDeleted: (id: string) => void }) {
-    const [confirming, setConfirming] = useState(false);
+export default function TaskDeleteAction({
+    task,
+    confirming,
+    onConfirmingChange,
+    onDeleted,
+}: {
+    task: Task;
+    confirming: boolean;
+    onConfirmingChange: (next: boolean) => void;
+    onDeleted: (id: string) => void;
+}) {
     const [deleting, setDeleting] = useState(false);
     const [error, setError] = useState(false);
     const inFlight = useRef(false);
@@ -12,7 +22,7 @@ export default function TaskDeleteAction({ task, onDeleted }: { task: Task; onDe
         if (deleting) {
             return;
         }
-        setConfirming(false);
+        onConfirmingChange(false);
         setError(false);
     }
 
@@ -39,22 +49,23 @@ export default function TaskDeleteAction({ task, onDeleted }: { task: Task; onDe
             <button
                 type="button"
                 aria-label={`${task.name} の削除`}
-                className="ml-3 rounded text-sm font-semibold text-[#942e28] underline outline-offset-2 focus-visible:outline-2"
+                title="タスクを削除"
                 onClick={() => {
-                    setConfirming(true);
+                    onConfirmingChange(true);
                     setError(false);
                 }}
+                className="grid size-8 place-items-center rounded text-muted transition-colors hover:bg-hover hover:text-danger focus-visible:outline-2 focus-visible:outline-accent"
             >
-                削除
+                <TrashIcon className="size-[18px]" />
             </button>
         );
     }
 
     return (
-        <div className="mt-2 space-y-2 rounded-lg border border-marker/40 p-2.5 text-sm">
-            <p className="font-semibold">このタスクを削除しますか？</p>
+        <div className="w-full space-y-2 rounded-md border border-danger/30 bg-block p-3 text-xs shadow-xs">
+            <p className="font-semibold text-ink">このタスクを削除しますか？</p>
             {error && (
-                <p role="alert" className="text-[#942e28]">
+                <p role="alert" className="text-danger">
                     タスクを削除できませんでした。もう一度お試しください。
                 </p>
             )}
@@ -63,7 +74,7 @@ export default function TaskDeleteAction({ task, onDeleted }: { task: Task; onDe
                     type="button"
                     disabled={deleting}
                     onClick={() => void confirmDelete()}
-                    className="rounded-lg bg-[#942e28] px-3 py-1.5 text-white focus-visible:outline-2 focus-visible:outline-accent disabled:opacity-60"
+                    className="rounded bg-danger px-3 py-1.5 text-danger-fg transition-opacity hover:opacity-90 focus-visible:outline-2 focus-visible:outline-accent disabled:opacity-60"
                 >
                     {deleting ? '削除中…' : '削除する'}
                 </button>
@@ -71,7 +82,7 @@ export default function TaskDeleteAction({ task, onDeleted }: { task: Task; onDe
                     type="button"
                     disabled={deleting}
                     onClick={cancel}
-                    className="rounded-lg px-3 py-1.5 text-accent focus-visible:outline-2 disabled:opacity-60"
+                    className="rounded border border-border bg-block px-3 py-1.5 text-muted hover:bg-hover focus-visible:outline-2 focus-visible:outline-accent disabled:opacity-60"
                 >
                     キャンセル
                 </button>
