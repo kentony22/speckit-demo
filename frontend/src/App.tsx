@@ -1,24 +1,36 @@
 import { useEffect, useRef, useState } from 'react';
 import type { KeyboardEvent } from 'react';
-import { createTask, isBlankTaskName, listTasks, TaskRequestError, updateTaskCompletion } from './api/tasks';
+import { createTask, isBlankTaskName, listTasks, TaskRequestError, updateTaskCompletion, updateTaskImportance } from './api/tasks';
 import type { Task } from './api/tasks';
 import TaskNameEditor from './TaskNameEditor';
 
 type TaskUpdate = Partial<Omit<Task, 'id'>>;
+type TaskView = 'tasks' | 'important';
+type TaskStatusField = 'completed' | 'important';
 
-function TaskRow({ task, onUpdated }: { task: Task; onUpdated: (id: string, update: TaskUpdate) => void }) {
+function readTaskView(): TaskView {
+    return window.location.hash === '#important' ? 'important' : 'tasks';
+}
+
+function TaskRow({ task, hidden, onUpdated }: {
+    task: Task;
+    hidden: boolean;
+    onUpdated: (id: string, update: TaskUpdate) => void;
+}) {
     const inFlight = useRef(false);
     const [saveState, setSaveState] = useState<'idle' | 'saving' | 'error'>('idle');
 
-    async function toggleCompletion() {
+    async function toggleStatus(field: TaskStatusField) {
         if (inFlight.current) {
             return;
         }
         inFlight.current = true;
         setSaveState('saving');
         try {
-            const updated = await updateTaskCompletion(task.id, !task.completed);
-            onUpdated(updated.id, { completed: updated.completed });
+            const updated = await (field === 'completed'
+                ? updateTaskCompletion(task.id, !task.completed)
+                : updateTaskImportance(task.id, !task.important));
+            onUpdated(updated.id, { [field]: updated[field] });
             setSaveState('idle');
         } catch {
             setSaveState('error');
@@ -28,36 +40,58 @@ function TaskRow({ task, onUpdated }: { task: Task; onUpdated: (id: string, upda
     }
 
     return (
-        <li className="flex items-start gap-3.5 rounded-xl bg-block px-4 py-4 shadow-xs sm:text-lg">
+        <li hidden={hidden} className={`${hidden ? 'hidden' : 'flex'} items-start gap-3.5 rounded-xl bg-block px-4 py-4 shadow-xs sm:text-lg`}>
             <button
                 type="button"
                 aria-label={`${task.name} の完了`}
                 aria-pressed={task.completed}
                 aria-disabled={saveState === 'saving'}
-                onClick={toggleCompletion}
+                onClick={() => void toggleStatus('completed')}
                 className="-my-1 -ml-1 grid size-8 shrink-0 place-items-center rounded-full focus-visible:outline-2 focus-visible:outline-accent aria-disabled:opacity-60"
             >
                 <span aria-hidden="true" className={`grid size-5 place-items-center rounded-full border-2 border-marker text-sm leading-none font-bold ${task.completed ? 'bg-selection' : ''}`}>
                     {task.completed && '✓'}
                 </span>
             </button>
-            <div className="min-w-0">
+            <div className="min-w-0 grow">
                 <span className={`wrap-anywhere whitespace-pre-wrap ${task.completed ? 'text-muted line-through' : ''}`}>{task.name}</span>
                 <TaskNameEditor task={task} onSaved={(name) => onUpdated(task.id, { name })} />
                 {saveState === 'saving' && <p role="status" className="mt-1 text-sm">保存中…</p>}
                 {saveState === 'error' && <p role="alert" className="mt-1 text-sm text-[#942e28]">状態を変更できませんでした。もう一度お試しください。</p>}
             </div>
+            <button
+                type="button"
+                aria-label={`${task.name} の重要`}
+                aria-pressed={task.important}
+                aria-disabled={saveState === 'saving'}
+                onClick={() => void toggleStatus('important')}
+                className={`-my-1 grid size-8 shrink-0 place-items-center rounded-full text-xl leading-none focus-visible:outline-2 focus-visible:outline-accent aria-disabled:opacity-60 ${task.important ? 'text-accent' : 'text-muted'}`}
+            >
+                <span aria-hidden="true">{task.important ? '★' : '☆'}</span>
+            </button>
         </li>
     );
 }
 
 export default function App() {
     const [tasks, setTasks] = useState<Task[]>([]);
+    const [view, setView] = useState(readTaskView);
+    const isImportantView = view === 'important';
+    const hasVisibleTasks = isImportantView ? tasks.some((task) => task.important) : tasks.length > 0;
     const [loadState, setLoadState] = useState<'loading' | 'ready' | 'error'>('loading');
     const [loadAttempt, setLoadAttempt] = useState(0);
     const [name, setName] = useState('');
     const [saveError, setSaveError] = useState('');
     const [saving, setSaving] = useState(false);
+
+    useEffect(() => {
+        function updateView() {
+            setView(readTaskView());
+        }
+
+        window.addEventListener('hashchange', updateView);
+        return () => window.removeEventListener('hashchange', updateView);
+    }, []);
 
     useEffect(() => {
         const request = new AbortController();
@@ -116,15 +150,28 @@ export default function App() {
                     To Do
                 </div>
                 <nav aria-label="メイン">
-                    <a href="#tasks" aria-current="page" className="block rounded-lg bg-selection px-3.5 py-2 font-semibold text-ink outline-offset-4 focus-visible:outline-2 sm:px-4 sm:py-3">
-                        タスク
-                    </a>
+                    <div className="flex gap-1 sm:flex-col">
+                        <a
+                            href="#tasks"
+                            aria-current={view === 'tasks' ? 'page' : undefined}
+                            className="block rounded-lg px-3.5 py-2 font-semibold outline-offset-4 focus-visible:outline-2 aria-[current=page]:bg-selection sm:px-4 sm:py-3"
+                        >
+                            タスク
+                        </a>
+                        <a
+                            href="#important"
+                            aria-current={isImportantView ? 'page' : undefined}
+                            className="block rounded-lg px-3.5 py-2 font-semibold outline-offset-4 focus-visible:outline-2 aria-[current=page]:bg-selection sm:px-4 sm:py-3"
+                        >
+                            重要
+                        </a>
+                    </div>
                 </nav>
             </aside>
 
             <main className="flex min-w-0 flex-col bg-canvas">
                 <section id="tasks" aria-labelledby="tasks-heading" className="grow px-5 pt-7 pb-6 sm:px-8 sm:pt-10 lg:px-12">
-                    <h1 id="tasks-heading" className="mb-5 text-3xl font-extrabold tracking-tight sm:mb-6 sm:text-4xl">タスク</h1>
+                    <h1 id="tasks-heading" className="mb-5 text-3xl font-extrabold tracking-tight sm:mb-6 sm:text-4xl">{isImportantView ? '重要' : 'タスク'}</h1>
                     {loadState === 'loading' && <p role="status">読み込み中…</p>}
                     {loadState === 'error' && (
                         <div role="alert" className="rounded-xl bg-block p-4 shadow-xs">
@@ -137,18 +184,18 @@ export default function App() {
                             </button>
                         </div>
                     )}
-                    {loadState === 'ready' && tasks.length === 0 && (
+                    {loadState === 'ready' && !hasVisibleTasks && (
                         <p role="status" className="rounded-xl bg-block px-4 py-4 text-muted shadow-xs">
-                            タスクはまだありません。
+                            {isImportantView ? '重要なタスクはまだありません。' : 'タスクはまだありません。'}
                         </p>
                     )}
                     <ul className="space-y-3">
                         {tasks.map((task) => (
-                            <TaskRow key={task.id} task={task} onUpdated={updateTask} />
+                            <TaskRow key={task.id} task={task} hidden={isImportantView && !task.important} onUpdated={updateTask} />
                         ))}
                     </ul>
                 </section>
-                <div className="sticky bottom-0 bg-canvas px-5 pt-3 pb-[max(1rem,env(safe-area-inset-bottom))] sm:px-8 sm:pt-4 lg:px-12">
+                <div hidden={isImportantView} className="sticky bottom-0 bg-canvas px-5 pt-3 pb-[max(1rem,env(safe-area-inset-bottom))] sm:px-8 sm:pt-4 lg:px-12">
                     <div className="relative">
                         <span aria-hidden="true" className="pointer-events-none absolute top-1/2 left-4 size-5 -translate-y-1/2 rounded-full border-2 border-marker" />
                         <input
