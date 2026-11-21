@@ -30,7 +30,7 @@ class CosmosTaskRepository {
     }
 
     TaskDocument create(String name) {
-        var item = new TaskDocument(UUID.randomUUID().toString(), ownerId, name, Instant.now().toString(), false);
+        var item = new TaskDocument(UUID.randomUUID().toString(), ownerId, name, Instant.now().toString(), false, false);
         container.createItem(item, partitionKey, new CosmosItemRequestOptions());
         return item;
     }
@@ -41,6 +41,10 @@ class CosmosTaskRepository {
 
     Optional<TaskDocument> updateName(String id, String name) {
         return patchTask(id, CosmosPatchOperations.create().set("/name", name));
+    }
+
+    Optional<TaskDocument> updateImportance(String id, boolean important) {
+        return patchTask(id, CosmosPatchOperations.create().set("/important", important));
     }
 
     private Optional<TaskDocument> patchTask(String id, CosmosPatchOperations operations) {

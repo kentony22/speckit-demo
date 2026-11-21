@@ -111,8 +111,8 @@ class TasksCosmosIT {
 
     @Test
     void renamesOnlyTheSelectedTaskAndKeepsItsCompletion() throws Exception {
-        var first = new TaskDocument(UUID.randomUUID().toString(), OWNER_ID, "元の名前", "2026-11-21T00:00:00Z", true);
-        var second = new TaskDocument(UUID.randomUUID().toString(), OWNER_ID, "別のタスク", "2026-11-20T00:00:00Z", false);
+        var first = new TaskDocument(UUID.randomUUID().toString(), OWNER_ID, "元の名前", "2026-11-21T00:00:00Z", true, true);
+        var second = new TaskDocument(UUID.randomUUID().toString(), OWNER_ID, "別のタスク", "2026-11-20T00:00:00Z", false, false);
         var partition = new PartitionKey(OWNER_ID);
         var options = new CosmosItemRequestOptions();
         container.createItem(first, partition, options);
@@ -124,22 +124,63 @@ class TasksCosmosIT {
                         .andExpect(status().isOk())
                         .andExpect(jsonPath("$.id").value(first.id()))
                         .andExpect(jsonPath("$.name").value("変更した名前"))
-                        .andExpect(jsonPath("$.completed").value(true));
+                        .andExpect(jsonPath("$.completed").value(true))
+                        .andExpect(jsonPath("$.important").value(true));
                 mvc.perform(get("/api/tasks"))
                         .andExpect(status().isOk())
                         .andExpect(jsonPath("$.length()").value(2))
                         .andExpect(jsonPath("$[0].name").value("変更した名前"))
                         .andExpect(jsonPath("$[0].completed").value(true))
+                        .andExpect(jsonPath("$[0].important").value(true))
                         .andExpect(jsonPath("$[1].name").value("別のタスク"));
 
                 var stored = container.readItem(first.id(), partition, TaskDocument.class).getItem();
-                assertThat(stored).isEqualTo(new TaskDocument(first.id(), OWNER_ID, "変更した名前", first.createdAt(), true));
+                assertThat(stored).isEqualTo(new TaskDocument(first.id(), OWNER_ID, "変更した名前", first.createdAt(), true, true));
                 assertThat(container.readItem(second.id(), partition, TaskDocument.class).getItem()).isEqualTo(second);
             } finally {
                 container.deleteItem(second.id(), partition, options);
             }
         } finally {
             container.deleteItem(first.id(), partition, options);
+        }
+    }
+
+    @Test
+    void persistsImportanceOnALegacyTaskAndPreservesCompletion() throws Exception {
+        var id = UUID.randomUUID().toString();
+        var partition = new PartitionKey(OWNER_ID);
+        var legacy = JsonNodeFactory.instance.objectNode()
+                .put("id", id)
+                .put("ownerId", OWNER_ID)
+                .put("name", "重要指定前のタスク")
+                .put("createdAt", "2026-11-21T00:00:00Z")
+                .put("completed", true);
+        container.createItem(legacy, partition, new CosmosItemRequestOptions());
+        try {
+            mvc.perform(get("/api/tasks"))
+                    .andExpect(status().isOk())
+                    .andExpect(jsonPath("$[0].id").value(id))
+                    .andExpect(jsonPath("$[0].important").value(false));
+
+            for (boolean important : new boolean[] {true, true, false}) {
+                mvc.perform(patch("/api/tasks/{id}/importance", id).contentType(APPLICATION_JSON)
+                                .content("{\"important\":" + important + "}"))
+                        .andExpect(status().isOk())
+                        .andExpect(jsonPath("$.id").value(id))
+                        .andExpect(jsonPath("$.completed").value(true))
+                        .andExpect(jsonPath("$.important").value(important));
+                mvc.perform(get("/api/tasks"))
+                        .andExpect(status().isOk())
+                        .andExpect(jsonPath("$[0].id").value(id))
+                        .andExpect(jsonPath("$[0].important").value(important));
+
+                var stored = container.readItem(id, partition, legacy.getClass()).getItem();
+                assertThat(stored.get("important")).isEqualTo(BooleanNode.valueOf(important));
+                legacy.fields().forEachRemaining(field ->
+                        assertThat(stored.get(field.getKey())).isEqualTo(field.getValue()));
+            }
+        } finally {
+            container.deleteItem(id, partition, new CosmosItemRequestOptions());
         }
     }
 

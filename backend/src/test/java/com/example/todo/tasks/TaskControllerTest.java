@@ -40,14 +40,15 @@ class TaskControllerTest {
     @Test
     void createsATask() throws Exception {
         when(repository.create("牛乳を買う")).thenReturn(
-                new TaskDocument("id", "demo-user", "牛乳を買う", "2026-11-21T00:00:00Z", false));
+                new TaskDocument("id", "demo-user", "牛乳を買う", "2026-11-21T00:00:00Z", false, false));
         mvc.perform(post("/api/tasks").contentType(APPLICATION_JSON).content("{\"name\":\"牛乳を買う\"}"))
                 .andExpect(status().isCreated())
                 .andExpect(jsonPath("$.id").value("id"))
                 .andExpect(jsonPath("$.name").value("牛乳を買う"))
                 .andExpect(jsonPath("$.createdAt").value("2026-11-21T00:00:00Z"))
                 .andExpect(jsonPath("$.ownerId").doesNotExist())
-                .andExpect(jsonPath("$.completed").value(false));
+                .andExpect(jsonPath("$.completed").value(false))
+                .andExpect(jsonPath("$.important").value(false));
     }
 
     @ParameterizedTest
@@ -100,7 +101,7 @@ class TaskControllerTest {
     @ValueSource(booleans = {true, false})
     void setsTaskCompletion(boolean completed) throws Exception {
         when(repository.updateCompletion("id", completed)).thenReturn(Optional.of(
-                new TaskDocument("id", "demo-user", "牛乳を買う", "2026-11-21T00:00:00Z", completed)));
+                new TaskDocument("id", "demo-user", "牛乳を買う", "2026-11-21T00:00:00Z", completed, false)));
         mvc.perform(patch("/api/tasks/{id}", "id").contentType(APPLICATION_JSON)
                         .content("{\"completed\":" + completed + "}"))
                 .andExpect(status().isOk())
@@ -109,6 +110,24 @@ class TaskControllerTest {
                 .andExpect(jsonPath("$.createdAt").value("2026-11-21T00:00:00Z"))
                 .andExpect(jsonPath("$.completed").value(completed))
                 .andExpect(jsonPath("$.ownerId").doesNotExist());
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {"", "{}", "{\"important\":null}", "{\"important\":\"true\"}"})
+    void rejectsNonBooleanImportance(String payload) throws Exception {
+        mvc.perform(patch("/api/tasks/{id}/importance", "id").contentType(APPLICATION_JSON).content(payload))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value("TASK_IMPORTANCE_REQUIRED"));
+        verifyNoInteractions(repository);
+    }
+
+    @Test
+    void reportsImportanceWriteFailure() throws Exception {
+        when(repository.updateImportance("id", true)).thenThrow(mock(CosmosException.class));
+        mvc.perform(patch("/api/tasks/{id}/importance", "id").contentType(APPLICATION_JSON)
+                        .content("{\"important\":true}"))
+                .andExpect(status().isServiceUnavailable())
+                .andExpect(jsonPath("$.code").value("TASK_STORAGE_UNAVAILABLE"));
     }
 
     @Test

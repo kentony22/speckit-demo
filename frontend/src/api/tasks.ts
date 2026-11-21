@@ -3,6 +3,7 @@ export type Task = {
     name: string;
     createdAt: string;
     completed: boolean;
+    important: boolean;
 };
 
 export function isBlankTaskName(name: string): boolean {
@@ -51,5 +52,13 @@ export function updateTaskName(id: string, name: string): Promise<Task> {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ name }),
+    });
+}
+
+export function updateTaskImportance(id: string, important: boolean): Promise<Task> {
+    return request<Task>(`${tasksPath}/${encodeURIComponent(id)}/importance`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ important }),
     });
 }

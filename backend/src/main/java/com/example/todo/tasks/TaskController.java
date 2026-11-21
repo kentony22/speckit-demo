@@ -59,6 +59,22 @@ class TaskController {
                 .orElseThrow(TaskNotFoundException::new);
     }
 
+    @PatchMapping("/{id}/importance")
+    TaskResponse updateImportance(@PathVariable String id, @RequestBody(required = false) JsonNode request) {
+        if (request == null || !request.path("important").isBoolean()) {
+            throw new TaskImportanceRequiredException();
+        }
+        return repository.updateImportance(id, request.path("important").booleanValue())
+                .map(TaskResponse::from)
+                .orElseThrow(TaskNotFoundException::new);
+    }
+
+    @ExceptionHandler(TaskImportanceRequiredException.class)
+    @ResponseStatus(HttpStatus.BAD_REQUEST)
+    ErrorResponse invalidImportance() {
+        return new ErrorResponse("TASK_IMPORTANCE_REQUIRED");
+    }
+
     @ExceptionHandler(TaskCompletionRequiredException.class)
     @ResponseStatus(HttpStatus.BAD_REQUEST)
     ErrorResponse invalidCompletion() {
@@ -86,9 +102,9 @@ class TaskController {
     record CreateTaskRequest(String name) {
     }
 
-    record TaskResponse(String id, String name, String createdAt, boolean completed) {
+    record TaskResponse(String id, String name, String createdAt, boolean completed, boolean important) {
         static TaskResponse from(TaskDocument item) {
-            return new TaskResponse(item.id(), item.name(), item.createdAt(), item.completed());
+            return new TaskResponse(item.id(), item.name(), item.createdAt(), item.completed(), item.important());
         }
     }
 
@@ -99,6 +115,9 @@ class TaskController {
     }
 
     private static final class TaskCompletionRequiredException extends RuntimeException {
+    }
+
+    private static final class TaskImportanceRequiredException extends RuntimeException {
     }
 
     private static final class TaskNotFoundException extends RuntimeException {
