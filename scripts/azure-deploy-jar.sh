@@ -6,6 +6,29 @@ jar="${1:?JAR path required}"
 app_args=(--subscription "$AZURE_SUBSCRIPTION_ID" --resource-group "$AZURE_RESOURCE_GROUP" --name "$AZURE_WEB_APP")
 rule="github-deploy-${GITHUB_RUN_ID:?}-${GITHUB_RUN_ATTEMPT:?}"
 
+cleanup_scm_rule() {
+    local rules
+    rules="$(az webapp config access-restriction show "${app_args[@]}" --output json)" || return 1
+    if jq -e --arg rule "$rule" 'any(.scmIpSecurityRestrictions[]?; .name == $rule)' <<< "$rules" > /dev/null; then
+        az webapp config access-restriction remove "${app_args[@]}" --scm-site true --rule-name "$rule" --output none || return 1
+        rules="$(az webapp config access-restriction show "${app_args[@]}" --output json)" || return 1
+    fi
+    if ! jq -e --arg rule "$rule" '
+        .scmIpSecurityRestrictionsUseMain == false and
+        .scmIpSecurityRestrictionsDefaultAction == "Deny" and
+        (.scmIpSecurityRestrictions | type) == "array" and
+        all(.scmIpSecurityRestrictions[]; .name != $rule and .action != "Allow")
+    ' <<< "$rules" > /dev/null; then
+        echo 'SCM still has an allow rule or its deny-by-default policy could not be confirmed.' >&2
+        return 1
+    fi
+}
+
+if [[ "$jar" == --cleanup ]]; then
+    cleanup_scm_rule
+    exit
+fi
+
 runner_ip="$(curl -4fsS --connect-timeout 10 --max-time 20 https://api.ipify.org)"
 python3 - "$runner_ip" <<'PY'
 import ipaddress
@@ -19,7 +42,7 @@ printf '::add-mask::%s\n' "$runner_ip"
 
 cleanup() {
     local status=$?
-    if ! az webapp config access-restriction remove "${app_args[@]}" --scm-site true --rule-name "$rule" --output none; then
+    if ! cleanup_scm_rule; then
         echo 'Failed to remove the temporary SCM access rule.' >&2
         return 1
     fi

@@ -113,6 +113,9 @@ Cosmos DB の `cosmosDatabaseName` と `cosmosContainerName` の既定値は `ta
 検証端末のパブリック IPv4 を `verifierIpv4` に指定する。Azure の画面と API はこの IP の `/32`
 だけを許可する。デモでは合成データを使う。SCM は別の制限を持ち、配備中だけ Actions ランナーの
 IP を一時許可する。SCM と FTP の基本認証は無効。
+配備ジョブは失敗やキャンセル時にも一時ルールの削除と拒否設定の確認を試みる。
+ランナーの強制終了などで確認ステップが完了しなかった場合は、再配備前に Azure Portal の
+App Service のアクセス制限で、SCM の既定動作が拒否であり `github-deploy-` で始まる一時ルールが残っていないことを確認する。
 
 ### Azure 配備と確認
 
