@@ -340,6 +340,77 @@ class TaskListsCosmosIT {
         }
     }
 
+    @Test
+    void renamesATaskListWhilePreservingGroupTasksAndOtherLists() throws Exception {
+        var ids = new ArrayList<String>();
+        try {
+            var groupId = createGroup("プライベート", ids);
+            var firstListId = createList("買い物", ids);
+            var secondListId = createList("読書", ids);
+            mvc.perform(patch("/api/task-lists/{id}/group", firstListId).contentType(APPLICATION_JSON)
+                            .content("{\"groupId\":\"" + groupId + "\"}"))
+                    .andExpect(status().isOk());
+
+            var taskCreated = mvc.perform(post("/api/tasks").contentType(APPLICATION_JSON)
+                            .content("{\"name\":\"牛乳を買う\"}"))
+                    .andExpect(status().isCreated())
+                    .andReturn();
+            String taskId = JsonPath.read(taskCreated.getResponse().getContentAsString(), "$.id");
+            ids.add(taskId);
+            mvc.perform(patch("/api/tasks/{id}/list", taskId).contentType(APPLICATION_JSON)
+                            .content("{\"listId\":\"" + firstListId + "\"}"))
+                    .andExpect(status().isOk());
+
+            mvc.perform(patch("/api/task-lists/{id}/name", firstListId).contentType(APPLICATION_JSON)
+                            .content("{\"name\":\"週末の買い物\"}"))
+                    .andExpect(status().isOk())
+                    .andExpect(jsonPath("$.id").value(firstListId))
+                    .andExpect(jsonPath("$.name").value("週末の買い物"))
+                    .andExpect(jsonPath("$.groupId").value(groupId));
+
+            mvc.perform(get("/api/task-lists"))
+                    .andExpect(status().isOk())
+                    .andExpect(jsonPath("$.length()").value(2))
+                    .andExpect(jsonPath("$[0].id").value(firstListId))
+                    .andExpect(jsonPath("$[0].name").value("週末の買い物"))
+                    .andExpect(jsonPath("$[0].groupId").value(groupId))
+                    .andExpect(jsonPath("$[1].id").value(secondListId))
+                    .andExpect(jsonPath("$[1].name").value("読書"))
+                    .andExpect(jsonPath("$[1].groupId").isEmpty());
+            mvc.perform(get("/api/tasks"))
+                    .andExpect(status().isOk())
+                    .andExpect(jsonPath("$[0].id").value(taskId))
+                    .andExpect(jsonPath("$[0].listId").value(firstListId));
+
+            mvc.perform(patch("/api/task-lists/{id}/name", taskId).contentType(APPLICATION_JSON)
+                            .content("{\"name\":\"タスクは変更不可\"}"))
+                    .andExpect(status().isNotFound())
+                    .andExpect(jsonPath("$.code").value("TASK_LIST_NOT_FOUND"));
+            mvc.perform(patch("/api/task-lists/{id}/name", groupId).contentType(APPLICATION_JSON)
+                            .content("{\"name\":\"グループは変更不可\"}"))
+                    .andExpect(status().isNotFound())
+                    .andExpect(jsonPath("$.code").value("TASK_LIST_NOT_FOUND"));
+
+            var foreignListId = "list-" + UUID.randomUUID();
+            var otherOwner = OWNER_ID + "-other";
+            var foreignPartition = new PartitionKey(otherOwner);
+            var foreignList = new TaskListDocument(foreignListId, otherOwner, TaskListDocument.KIND, "他所有者のリスト", "2026-11-21T00:00:00Z");
+            container.createItem(foreignList, foreignPartition, new CosmosItemRequestOptions());
+            try {
+                mvc.perform(patch("/api/task-lists/{id}/name", foreignListId).contentType(APPLICATION_JSON)
+                                .content("{\"name\":\"不正変更\"}"))
+                        .andExpect(status().isNotFound())
+                        .andExpect(jsonPath("$.code").value("TASK_LIST_NOT_FOUND"));
+                assertThat(container.readItem(foreignListId, foreignPartition, TaskListDocument.class).getItem().name())
+                        .isEqualTo("他所有者のリスト");
+            } finally {
+                container.deleteItem(foreignListId, foreignPartition, new CosmosItemRequestOptions());
+            }
+        } finally {
+            ids.forEach(itemId -> container.deleteItem(itemId, PARTITION, new CosmosItemRequestOptions()));
+        }
+    }
+
     private String createList(String name, List<String> ids) throws Exception {
         var result = mvc.perform(post("/api/task-lists").contentType(APPLICATION_JSON)
                         .content("{\"name\":\"" + name + "\"}"))

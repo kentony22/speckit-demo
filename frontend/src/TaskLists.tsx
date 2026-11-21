@@ -9,6 +9,7 @@ import {
     updateListGroupName,
     updateTaskList,
     updateTaskListGroup,
+    updateTaskListName,
 } from './api/tasks';
 import type { ListGroup, Task, TaskList } from './api/tasks';
 
@@ -148,6 +149,73 @@ function ListGroupNameEditor({
     );
 }
 
+export function TaskListNameEditor({
+    list,
+    onSaved,
+    onCancel,
+}: {
+    list: TaskList;
+    onSaved: (list: TaskList) => void;
+    onCancel: () => void;
+}) {
+    const [draft, setDraft] = useState(list.name);
+    const [error, setError] = useState<'blank' | 'save' | null>(null);
+    const [saving, setSaving] = useState(false);
+    const inFlight = useRef(false);
+
+    async function save(event: FormEvent<HTMLFormElement>) {
+        event.preventDefault();
+        if (inFlight.current) {
+            return;
+        }
+        if (isBlankTaskName(draft)) {
+            setError('blank');
+            return;
+        }
+        inFlight.current = true;
+        setSaving(true);
+        setError(null);
+        try {
+            onSaved(await updateTaskListName(list.id, draft));
+        } catch {
+            setError('save');
+        } finally {
+            inFlight.current = false;
+            setSaving(false);
+        }
+    }
+
+    return (
+        <form onSubmit={save} className="space-y-1.5 rounded-lg bg-block p-2 text-sm shadow-xs">
+            <input
+                autoFocus
+                value={draft}
+                readOnly={saving}
+                aria-label={`${list.name} のリスト名`}
+                aria-invalid={error === 'blank'}
+                onChange={(event) => {
+                    setDraft(event.target.value);
+                    setError(null);
+                }}
+                className="w-full rounded border border-marker px-2 py-1 text-sm focus-visible:outline-2 focus-visible:outline-accent"
+            />
+            {error && (
+                <p role="alert" className="text-xs text-[#942e28]">
+                    {error === 'blank' ? 'リスト名を入力してください。' : 'リスト名を変更できませんでした。もう一度お試しください。'}
+                </p>
+            )}
+            <div className="flex flex-wrap gap-1.5 text-xs font-semibold">
+                <button type="submit" disabled={saving} className="rounded bg-accent px-2.5 py-1 text-white disabled:opacity-50">
+                    {saving ? '保存中…' : '保存'}
+                </button>
+                <button type="button" disabled={saving} onClick={onCancel} className="rounded px-2.5 py-1 text-accent disabled:opacity-50">
+                    キャンセル
+                </button>
+            </div>
+        </form>
+    );
+}
+
 export function TaskListNavigation({
     lists,
     loadState,
@@ -156,6 +224,7 @@ export function TaskListNavigation({
     isImportantView,
     selectedList,
     addList,
+    updateList,
     addGroup,
     updateGroup,
     retryLoad,
@@ -173,6 +242,7 @@ export function TaskListNavigation({
 
     const [collapsedGroups, setCollapsedGroups] = useState<Record<string, boolean>>({});
     const [editingGroupId, setEditingGroupId] = useState<string | null>(null);
+    const [editingListId, setEditingListId] = useState<string | null>(null);
 
     const linkClass = 'block truncate rounded-lg px-3.5 py-2 outline-offset-4 focus-visible:outline-2 sm:px-4';
     const activeClass = 'bg-selection font-semibold text-ink';
@@ -230,6 +300,41 @@ export function TaskListNavigation({
         }
     }
 
+    function renderListRow(list: TaskList) {
+        if (editingListId === list.id) {
+            return (
+                <TaskListNameEditor
+                    key={list.id}
+                    list={list}
+                    onSaved={(updated) => {
+                        updateList(updated);
+                        setEditingListId(null);
+                    }}
+                    onCancel={() => setEditingListId(null)}
+                />
+            );
+        }
+        return (
+            <div key={list.id} className="flex items-center gap-1">
+                <a
+                    href={`#${list.id}`}
+                    aria-current={selectedList?.id === list.id ? 'page' : undefined}
+                    className={`min-w-0 flex-1 ${linkClass} ${selectedList?.id === list.id ? activeClass : 'hover:bg-block'}`}
+                >
+                    {list.name}
+                </a>
+                <button
+                    type="button"
+                    aria-label={`${list.name} の編集`}
+                    onClick={() => setEditingListId(list.id)}
+                    className="shrink-0 rounded px-2 py-1 text-xs font-semibold text-accent underline focus-visible:outline-2 focus-visible:outline-accent"
+                >
+                    編集
+                </button>
+            </div>
+        );
+    }
+
     return (
         <>
             <nav aria-label="メイン" className="min-w-0 space-y-1">
@@ -282,16 +387,7 @@ export function TaskListNavigation({
                                     {groupLists.length === 0 ? (
                                         <p className="px-3.5 py-1.5 text-xs text-muted sm:px-4">リストはまだありません。</p>
                                     ) : (
-                                        groupLists.map((list) => (
-                                            <a
-                                                key={list.id}
-                                                href={`#${list.id}`}
-                                                aria-current={selectedList?.id === list.id ? 'page' : undefined}
-                                                className={`${linkClass} ${selectedList?.id === list.id ? activeClass : 'hover:bg-block'}`}
-                                            >
-                                                {list.name}
-                                            </a>
-                                        ))
+                                        groupLists.map((list) => renderListRow(list))
                                     )}
                                 </div>
                             )}
@@ -299,16 +395,7 @@ export function TaskListNavigation({
                     );
                 })}
 
-                {ungroupedLists.map((list) => (
-                    <a
-                        key={list.id}
-                        href={`#${list.id}`}
-                        aria-current={selectedList?.id === list.id ? 'page' : undefined}
-                        className={`${linkClass} ${selectedList?.id === list.id ? activeClass : 'hover:bg-block'}`}
-                    >
-                        {list.name}
-                    </a>
-                ))}
+                {ungroupedLists.map((list) => renderListRow(list))}
             </nav>
 
             <form onSubmit={create} className="grid gap-2">

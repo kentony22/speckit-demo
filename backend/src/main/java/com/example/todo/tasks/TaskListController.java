@@ -41,6 +41,17 @@ class TaskListController {
         return ListResponse.from(repository.createList(name));
     }
 
+    @PatchMapping("/task-lists/{id}/name")
+    ListResponse updateListName(@PathVariable String id, @RequestBody(required = false) JsonNode request) {
+        var name = request == null ? null : request.path("name").stringValue(null);
+        if (name == null || name.matches("(?U)\\s*")) {
+            throw new InvalidListException("TASK_LIST_NAME_REQUIRED");
+        }
+        return repository.updateListName(id, name)
+                .map(ListResponse::from)
+                .orElseThrow(() -> new MissingListOrTaskException("TASK_LIST_NOT_FOUND"));
+    }
+
     @PatchMapping("/tasks/{id}/list")
     TaskResponse updateList(@PathVariable String id, @RequestBody(required = false) JsonNode request) {
         var value = request == null ? null : request.path("listId");
