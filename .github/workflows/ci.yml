@@ -50,3 +50,18 @@ jobs:
             - name: Show emulator logs on failure
               if: failure()
               run: docker compose logs --no-color cosmos
+
+    infrastructure:
+        name: Bicep validation
+        runs-on: ubuntu-24.04
+        steps:
+            - uses: actions/checkout@v7
+              with:
+                  persist-credentials: false
+            - name: Build and lint Bicep
+              run: |
+                  az bicep install --version v0.49.2
+                  az bicep build --file infra/main.bicep --outfile "$RUNNER_TEMP/main.json"
+                  az bicep lint --file infra/main.bicep
+                  bash -n scripts/azure-preflight.sh
+                  bash -n scripts/azure-deploy-jar.sh

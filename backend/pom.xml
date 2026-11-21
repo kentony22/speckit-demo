@@ -27,6 +27,11 @@
             <version>${azure-cosmos.version}</version>
         </dependency>
         <dependency>
+            <groupId>com.azure</groupId>
+            <artifactId>azure-identity</artifactId>
+            <version>1.19.0</version>
+        </dependency>
+        <dependency>
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-starter-webmvc-test</artifactId>
             <scope>test</scope>
@@ -52,4 +57,20 @@
             </plugin>
         </plugins>
     </build>
+    <profiles>
+        <profile>
+            <id>bundled-web</id>
+            <build>
+                <resources>
+                    <resource>
+                        <directory>src/main/resources</directory>
+                    </resource>
+                    <resource>
+                        <directory>../frontend/dist</directory>
+                        <targetPath>static</targetPath>
+                    </resource>
+                </resources>
+            </build>
+        </profile>
+    </profiles>
 </project>
