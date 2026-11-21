@@ -161,8 +161,8 @@ jobs:
             - name: Report deployed settings and browser URL
               if: success() && !cancelled() && inputs.mode == 'deploy'
               run: |
-                  az appservice plan show -g "$AZURE_RESOURCE_GROUP" -n "$AZURE_APP_SERVICE_PLAN" -o json |
-                      jq -e '.sku.name == "F1" and .sku.capacity == 1 and .reserved'
+                  az appservice plan show --subscription "$AZURE_SUBSCRIPTION_ID" -g "$AZURE_RESOURCE_GROUP" -n "$AZURE_APP_SERVICE_PLAN" -o json |
+                      jq -e '.sku.name == "F1" and .sku.capacity == 1 and ((.properties.reserved // .reserved) == true)'
                   az webapp config show -g "$AZURE_RESOURCE_GROUP" -n "$AZURE_WEB_APP" -o json |
                       jq -e --arg ip "$AZURE_VERIFIER_IPV4/32" '
                           .linuxFxVersion == "JAVA|25-java25" and
