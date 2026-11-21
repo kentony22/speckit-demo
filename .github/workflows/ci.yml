@@ -63,5 +63,6 @@ jobs:
                   az bicep install --version v0.49.2
                   az bicep build --file infra/main.bicep --outfile "$RUNNER_TEMP/main.json"
                   az bicep lint --file infra/main.bicep
+                  bash -n scripts/azure-check-free-tier.sh
                   bash -n scripts/azure-preflight.sh
                   bash -n scripts/azure-deploy-jar.sh
