@@ -16,6 +16,7 @@ import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 import static org.springframework.http.MediaType.APPLICATION_JSON;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
@@ -152,6 +153,30 @@ class TaskControllerTest {
     void reportsWriteFailure() throws Exception {
         when(repository.create("買い物")).thenThrow(mock(CosmosException.class));
         mvc.perform(post("/api/tasks").contentType(APPLICATION_JSON).content("{\"name\":\"買い物\"}"))
+                .andExpect(status().isServiceUnavailable())
+                .andExpect(jsonPath("$.code").value("TASK_STORAGE_UNAVAILABLE"));
+    }
+
+    @Test
+    void deletesATask() throws Exception {
+        when(repository.delete("id")).thenReturn(true);
+        mvc.perform(delete("/api/tasks/{id}", "id"))
+                .andExpect(status().isNoContent())
+                .andExpect(content().string(""));
+    }
+
+    @Test
+    void reportsMissingTaskOnDelete() throws Exception {
+        when(repository.delete("missing")).thenReturn(false);
+        mvc.perform(delete("/api/tasks/{id}", "missing"))
+                .andExpect(status().isNotFound())
+                .andExpect(jsonPath("$.code").value("TASK_NOT_FOUND"));
+    }
+
+    @Test
+    void reportsDeleteFailure() throws Exception {
+        when(repository.delete("id")).thenThrow(mock(CosmosException.class));
+        mvc.perform(delete("/api/tasks/{id}", "id"))
                 .andExpect(status().isServiceUnavailable())
                 .andExpect(jsonPath("$.code").value("TASK_STORAGE_UNAVAILABLE"));
     }

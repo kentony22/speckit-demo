@@ -90,3 +90,13 @@ export function updateTaskList(id: string, listId: string | null): Promise<Task>
         body: JSON.stringify({ listId }),
     });
 }
+
+export async function deleteTask(id: string): Promise<void> {
+    const response = await fetch(`${tasksPath}/${encodeURIComponent(id)}`, {
+        method: 'DELETE',
+    });
+    if (!response.ok) {
+        const body = await response.json().catch(() => null);
+        throw new TaskRequestError(body?.code ?? 'TASK_REQUEST_FAILED');
+    }
+}

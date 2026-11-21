@@ -133,6 +133,7 @@ resource tasksRole 'Microsoft.DocumentDB/databaseAccounts/sqlRoleDefinitions@202
                     'Microsoft.DocumentDB/databaseAccounts/sqlDatabases/containers/items/read'
                     'Microsoft.DocumentDB/databaseAccounts/sqlDatabases/containers/items/create'
                     'Microsoft.DocumentDB/databaseAccounts/sqlDatabases/containers/items/replace'
+                    'Microsoft.DocumentDB/databaseAccounts/sqlDatabases/containers/items/delete'
                 ]
             }
         ]

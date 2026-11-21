@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import type { KeyboardEvent } from 'react';
 import { createTask, isBlankTaskName, listTasks, TaskRequestError, updateTaskCompletion, updateTaskImportance } from './api/tasks';
 import type { Task, TaskList } from './api/tasks';
+import TaskDeleteAction from './TaskDeleteAction';
 import TaskNameEditor from './TaskNameEditor';
 import { TaskListMembership, TaskListNavigation, useTaskLists } from './TaskLists';
 import { resolveVisibleTasks } from './taskSearch';
@@ -9,10 +10,11 @@ import { resolveVisibleTasks } from './taskSearch';
 type TaskUpdate = Partial<Omit<Task, 'id'>>;
 type TaskStatusField = 'completed' | 'important';
 
-function TaskRow({ task, lists, onUpdated }: {
+function TaskRow({ task, lists, onUpdated, onDeleted }: {
     task: Task;
     lists: TaskList[];
     onUpdated: (id: string, update: TaskUpdate) => void;
+    onDeleted: (id: string) => void;
 }) {
     const inFlight = useRef(false);
     const [saveState, setSaveState] = useState<'idle' | 'saving' | 'error'>('idle');
@@ -53,6 +55,7 @@ function TaskRow({ task, lists, onUpdated }: {
             <div className="min-w-0 grow">
                 <span className={`wrap-anywhere whitespace-pre-wrap ${task.completed ? 'text-muted line-through' : ''}`}>{task.name}</span>
                 <TaskNameEditor task={task} onSaved={(name) => onUpdated(task.id, { name })} />
+                <TaskDeleteAction task={task} onDeleted={onDeleted} />
                 {saveState === 'saving' && <p role="status" className="mt-1 text-sm">保存中…</p>}
                 {saveState === 'error' && <p role="alert" className="mt-1 text-sm text-[#942e28]">状態を変更できませんでした。もう一度お試しください。</p>}
                 {lists.length > 0 && <TaskListMembership task={task} lists={lists} onUpdated={(updated) => onUpdated(updated.id, { listId: updated.listId })} />}
@@ -118,6 +121,10 @@ export default function App() {
 
     function updateTask(id: string, update: TaskUpdate) {
         setTasks((items) => items.map((item) => item.id === id ? { ...item, ...update } : item));
+    }
+
+    function removeTask(id: string) {
+        setTasks((items) => items.filter((item) => item.id !== id));
     }
 
     function handleInputKeyDown(event: KeyboardEvent<HTMLInputElement>) {
@@ -200,6 +207,7 @@ export default function App() {
                                 task={task}
                                 lists={taskLists.lists}
                                 onUpdated={updateTask}
+                                onDeleted={removeTask}
                             />
                         ))}
                     </ul>

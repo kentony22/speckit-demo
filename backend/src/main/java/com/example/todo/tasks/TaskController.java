@@ -2,6 +2,7 @@ package com.example.todo.tasks;
 
 import com.azure.cosmos.CosmosException;
 import org.springframework.http.HttpStatus;
+import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PatchMapping;
@@ -67,6 +68,14 @@ class TaskController {
         return repository.updateImportance(id, request.path("important").booleanValue())
                 .map(TaskResponse::from)
                 .orElseThrow(TaskNotFoundException::new);
+    }
+
+    @DeleteMapping("/{id}")
+    @ResponseStatus(HttpStatus.NO_CONTENT)
+    void delete(@PathVariable String id) {
+        if (!repository.delete(id)) {
+            throw new TaskNotFoundException();
+        }
     }
 
     @ExceptionHandler(TaskImportanceRequiredException.class)
